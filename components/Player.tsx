@@ -498,7 +498,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
     const AD_SOURCES = [
         "https://media.w3.org/2010/05/sintel/trailer.mp4?utm_source=chatgpt.com",
-        "https://rr7---sn-5abxgpxuxaxjvh-j1ae.googlevideo.com/videoplayback?expire=1782862368&ei=wP1DaqvSBoiUhcIPlcLe-Ak&ip=41.110.126.207&id=o-APwaxZfkaXGtmisLipcLXVwclVeNY9vBGaYd31WK14Kl&itag=299&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=292&met=1782840768%2C&mh=jE&mm=31%2C29&mn=sn-5abxgpxuxaxjvh-j1ae%2Csn-h5q7kned&ms=au%2Crdu&mv=m&mvi=7&pl=23&rms=au%2Cau&initcwndbps=576250&bui=ARmQxEVIX3PNIEFF_DhnLzxuOLPXFfqs-xOSRkwqBbLS1hQa2h7VWax4hSiXONifCUaH-IlC9FaSsufB&spc=SQ-umurvU3ICwW_HuF7-WyjTZ8_5Miw30lGI0-TykhC-&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=35473092&dur=153.340&lmt=1767239705822326&mt=1782840292&fvip=4&keepalive=yes&fexp=51565116%2C51565681%2C52017147&c=ANDROID_VR&txp=5532534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AHEqNM4wRQIgNESy7wlWJYfnje061LjDWs975tOYegZfvtStDJDwjI4CIQC79f6WqlxpGmyHxGjGywZZeRc7OU2cImEOWv5Mfl2ooQ%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgYKzfybAHaDpnDDjXm80r6kAl3jp4S4yPHuk0kwEIW1oCIQCLdayw-aw7gvDdAdZ96mtDVKOyrPI6JKET9LkYkJAsOg%3D%3D&cpn=zAw7EOY6o-kd4JSJ"
+        "https://media.w3.org/2010/05/sintel/trailer.mp4?utm_source=chatgpt.com"
     ];
 
     useEffect(() => {
@@ -617,59 +617,13 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         }
     }, [playbackRate]);
 
+    // Highly optimized, CPU-friendly alternative: CSS filter applied directly to the video element instead of 60 FPS canvas redraw
     useEffect(() => {
-        if (!isEnhancementActive || !videoRef.current || !enhancementCanvasRef.current) {
-            if (enhancementCanvasRef.current) {
-                const ctx = enhancementCanvasRef.current.getContext('2d');
-                ctx?.clearRect(0, 0, enhancementCanvasRef.current.width, enhancementCanvasRef.current.height);
-            }
-            return;
+        if (enhancementCanvasRef.current) {
+            const ctx = enhancementCanvasRef.current.getContext('2d');
+            ctx?.clearRect(0, 0, enhancementCanvasRef.current.width, enhancementCanvasRef.current.height);
         }
-
-        const video = videoRef.current;
-        const canvas = enhancementCanvasRef.current;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) return;
-
-        let active = true;
-
-        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-            const drawFrame = (now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => {
-                if (!active) return;
-                
-                if (canvas.width !== metadata.width || canvas.height !== metadata.height) {
-                    canvas.width = metadata.width;
-                    canvas.height = metadata.height;
-                }
-                
-                // Real-time AI Upscaling / Sharpening via filter
-                ctx.filter = 'contrast(1.1) saturate(1.15) brightness(1.05) drop-shadow(0px 0px 1px rgba(255,255,255,0.05))';
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                (video as any).requestVideoFrameCallback(drawFrame);
-            };
-            (video as any).requestVideoFrameCallback(drawFrame);
-        } else {
-            const drawFrame = () => {
-                if (!active) return;
-                if (video.videoWidth && video.videoHeight) {
-                     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                    }
-                    ctx.filter = 'contrast(1.1) saturate(1.15) brightness(1.05)';
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                }
-                enhancementAnimFrame.current = requestAnimationFrame(drawFrame);
-            };
-            drawFrame();
-        }
-
-        return () => {
-            active = false;
-            cancelAnimationFrame(enhancementAnimFrame.current);
-        };
-    }, [isEnhancementActive, activeStreamUrl]);
+    }, [isEnhancementActive]);
 
     // Effect 1: Fetch the stream URL and other data
     useEffect(() => {
@@ -910,7 +864,14 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     useEffect(() => {
         const video = videoRef.current;
         if (!video) return;
-        const onPlay = () => setIsPlaying(true);
+        const onPlay = () => {
+            if (adStateRef.current.isActive) {
+                video.pause();
+                setIsPlaying(false);
+            } else {
+                setIsPlaying(true);
+            }
+        };
         const onPause = () => setIsPlaying(false);
         const onTimeUpdate = () => {
             setCurrentTime(video.currentTime);
@@ -963,7 +924,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     }, [activeDubbingLang, onVideoEnded]);
 
     const togglePlay = useCallback(() => {
-        if (showSettingsPanel || showSubtitlesPanel) return;
+        if (showSettingsPanel || showSubtitlesPanel || adStateRef.current.isActive) return;
         const video = videoRef.current;
         if (!video) return;
     
@@ -1390,7 +1351,14 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
             {/* FIX: The `inert` attribute expects a boolean value, not a string. */}
             <div inert={isChannelListVisible ? true : undefined} className="absolute inset-0 w-full h-full">
-                <video ref={videoRef} className={`w-full h-full object-contain ${isEnhancementActive ? 'opacity-0' : ''}`} playsInline autoPlay preload="metadata">
+                <video 
+                    ref={videoRef} 
+                    className="w-full h-full object-contain" 
+                    style={{ filter: isEnhancementActive ? 'contrast(1.1) saturate(1.15) brightness(1.05)' : 'none' }}
+                    playsInline 
+                    autoPlay 
+                    preload="metadata"
+                >
                 {vttTracks.map(track => (
                         <track key={track.lang} kind="subtitles" srcLang={track.lang} src={track.url} label={track.label} default={activeSubtitleLang === track.lang} />
                     ))}
@@ -1398,7 +1366,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 
                 <canvas 
                     ref={enhancementCanvasRef} 
-                    className={`absolute inset-0 w-full h-full object-contain pointer-events-none transition-opacity duration-300 ${isEnhancementActive ? 'opacity-100' : 'opacity-0'}`} 
+                    className="absolute inset-0 w-full h-full object-contain pointer-events-none opacity-0" 
                 />
                 
                 <div 
