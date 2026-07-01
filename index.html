@@ -152,7 +152,6 @@
         width: 300%;
         height: 300%;
         background: conic-gradient(from 0deg, transparent 0%, transparent 30%, #3b82f6 45%, #ec4899 60%, #eab308 75%, #10b981 90%, #3b82f6 100%);
-        animation: border-worm 2.5s linear infinite;
         z-index: 0;
         opacity: 0;
         transition: opacity 0.3s ease-in-out;
@@ -165,7 +164,7 @@
         width: 100%;
         height: 100%;
       }
-      /* Only show the golden rotating border on hover, focus, or when hovered inside card/group wrappers */
+      /* Only show and animate the golden rotating border on hover, focus, or when hovered inside card/group wrappers */
       .golden-worm-border:hover::before,
       .golden-worm-border:focus::before,
       .golden-worm-border:focus-within::before,
@@ -178,6 +177,7 @@
       .glow-card-container:hover .golden-worm-border::before,
       .glow-card-container:focus-within .golden-worm-border::before {
         opacity: 1;
+        animation: border-worm 2.5s linear infinite;
       }
 
       .interactive-card {
@@ -189,7 +189,7 @@
       }
       .interactive-card .quick-view {
         opacity: 0;
-        transition: opacity 0.3s ease-in-out, max-height 0.4s ease-in-out, padding 0.4s ease-in-out;
+        transition: opacity 0.25s ease-in-out;
         max-height: 0;
         overflow: hidden;
         padding-top: 0;
