@@ -457,7 +457,7 @@ const PosterCard: React.FC<{
             }}
             className="absolute top-2 left-2 z-10 text-3xl font-black text-[var(--primary)] pointer-events-none"
           >
-            V
+            N
           </span>
         )}
         <div className="relative w-full aspect-video bg-black">
@@ -975,43 +975,12 @@ const LiveTvCard: React.FC<{
 
 const InteractiveAdBanner: React.FC = () => {
   return (
-    <div className="mx-6 my-10 relative overflow-hidden rounded-xl bg-gradient-to-r from-indigo-900 via-purple-900 to-pink-900 p-8 shadow-2xl border border-purple-500/30 group">
-      <div className="absolute top-0 right-0 w-96 h-96 bg-pink-500/10 rounded-full blur-[80px] pointer-events-none group-hover:bg-pink-500/20 transition-all duration-500" />
-      <div className="absolute -bottom-10 left-10 w-80 h-80 bg-blue-500/10 rounded-full blur-[70px] pointer-events-none group-hover:bg-blue-500/20 transition-all duration-500" />
-
-      <div className="relative z-10 flex flex-col md:flex-row items-center justify-between gap-6">
-        <div className="flex flex-col gap-2 max-w-2xl text-center md:text-left">
-          <div className="flex items-center justify-center md:justify-start gap-2">
-            <span className="bg-yellow-500 text-black text-xs font-black uppercase tracking-widest px-2.5 py-1 rounded-full shadow-md animate-pulse">
-              🧠 QUIZ TIME
-            </span>
-            <span className="text-pink-400 text-xs font-bold uppercase tracking-widest">
-              • PLAY & WIN COINS
-            </span>
-          </div>
-          <h2 className="text-2xl md:text-4xl font-black text-white tracking-tight leading-tight mt-1">
-            TEST YOUR BRAIN. BE THE CHAMPION!
-          </h2>
-          <p className="text-sm md:text-base text-zinc-300 font-medium max-w-xl">
-            Answer pop-culture, cinematic trivia, and historical questions to
-            unlock premium viewing badges and exclusive stickers.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-4 flex-shrink-0">
-          <button
-            onClick={() => alert("Quiz system launching! Good luck!")}
-            className="px-8 py-4 bg-emerald-500 hover:bg-emerald-400 text-black font-black uppercase tracking-widest text-sm rounded-lg shadow-lg hover:shadow-emerald-500/40 transition-all duration-300 active:scale-95 flex items-center gap-2 group-hover:scale-105"
-          >
-            <i className="fa-solid fa-play text-xs" />
-            Play Now!
-          </button>
-        </div>
-      </div>
-
-      <div className="absolute right-12 bottom-1/2 translate-y-1/2 opacity-15 pointer-events-none hidden lg:block text-[150px] text-white font-black select-none leading-none">
-        ?
-      </div>
+    <div className="mx-6 my-10 relative overflow-hidden rounded-xl shadow-2xl border border-zinc-800/40 h-36 sm:h-44 md:h-48 lg:h-52 bg-zinc-950">
+      <img
+        src="https://i.ibb.co/MkzkRg7B/0608-merchandising-film.jpg"
+        alt="Promo Banner"
+        className="w-full h-full object-cover pointer-events-none"
+      />
     </div>
   );
 };
