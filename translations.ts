@@ -247,6 +247,8 @@ export const translations = {
     'maturitySettings': 'Maturity Settings:',
     'allMaturityRatings': 'ALL MATURITY RATINGS',
     'autoplayControls': 'Autoplay controls',
+    'geminiApiKeyLabel': 'Gemini API Key (Custom):',
+    'geminiApiKeyPlaceholder': 'Enter your own Gemini API Key...',
 
 
     // GenericPage
@@ -535,6 +537,8 @@ export const translations = {
     'maturitySettings': 'إعدادات التصنيف:',
     'allMaturityRatings': 'جميع التصنيفات العمرية',
     'autoplayControls': 'عناصر التحكم في التشغيل التلقائي',
+    'geminiApiKeyLabel': 'مفتاح Gemini API (مخصص):',
+    'geminiApiKeyPlaceholder': 'أدخل مفتاح Gemini API الخاص بك...',
 
 
     // GenericPage
