@@ -18,32 +18,64 @@ import {
   POSTER_SIZE,
 } from "../contexts/constants";
 import { fetchRandomCategoryChannels, IptvChannel } from "../services/iptvService";
-import { motion, AnimatePresence } from "motion/react";
 
 const AmbientBackground: React.FC<{ imageUrl: string | null }> = ({
   imageUrl,
 }) => {
-  if (!imageUrl) return null;
+  const [displayImage, setDisplayImage] = useState<string | null>(imageUrl);
+  const [opacity, setOpacity] = useState(0);
+
+  useEffect(() => {
+    if (imageUrl === displayImage) {
+      if (imageUrl && opacity === 0) {
+        setOpacity(0.30);
+      }
+      return;
+    }
+
+    if (imageUrl) {
+      if (displayImage) {
+        setOpacity(0);
+        const timer = setTimeout(() => {
+          setDisplayImage(imageUrl);
+          setOpacity(0.30);
+        }, 150);
+        return () => clearTimeout(timer);
+      } else {
+        setDisplayImage(imageUrl);
+        const timer = setTimeout(() => {
+          setOpacity(0.30);
+        }, 50);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      setOpacity(0);
+      const timer = setTimeout(() => {
+        setDisplayImage(null);
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [imageUrl, displayImage, opacity]);
+
+  if (!displayImage) return null;
 
   return (
     <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden bg-[var(--background)]">
-      <AnimatePresence mode="popLayout">
-        <motion.div
-          key={imageUrl}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.38 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.8, ease: "easeInOut" }}
-          style={{ willChange: "opacity" }}
-          className="absolute -top-[10%] -right-[10%] w-[65vw] h-[65vw] max-w-[700px] max-h-[700px] rounded-full overflow-hidden blur-[80px] saturate-[1.6] transform-gpu pointer-events-none"
-        >
-          <img
-            src={imageUrl}
-            alt="Dynamic Ambient Background"
-            className="w-full h-full object-cover pointer-events-none"
-          />
-        </motion.div>
-      </AnimatePresence>
+      <div
+        className="absolute -top-[10%] -right-[10%] w-[65vw] h-[65vw] max-w-[700px] max-h-[700px] rounded-full overflow-hidden pointer-events-none transition-opacity duration-500 ease-in-out"
+        style={{
+          opacity: opacity,
+          filter: "blur(45px) saturate(1.4)", // Reduced blur radius from 80px to 45px for optimal rendering speed
+          transform: "translate3d(0, 0, 0)", // GPU hardware acceleration
+          willChange: "opacity",
+        }}
+      >
+        <img
+          src={displayImage}
+          alt=""
+          className="w-full h-full object-cover pointer-events-none"
+        />
+      </div>
 
       {/* Background gradients for excellent reading contrast & blending */}
       <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/75 to-[var(--background)] pointer-events-none" />
