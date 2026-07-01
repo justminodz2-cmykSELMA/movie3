@@ -128,10 +128,12 @@ const AvatarGrid: React.FC<{ onSelect: (avatar: string) => void; onBack: () => v
     return (
         <div className="flex flex-col items-center min-h-screen p-4 text-white animate-fade-in bg-transparent">
              <div className="absolute top-4 left-4">
-                <div className="w-14 h-14 bg-red-600 flex items-center justify-center font-black text-5xl rounded-md" style={{fontFamily: "'Anton', sans-serif"}}>
-                    N
-                </div>
-            </div>
+                 <img 
+                     src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
+                     alt="Logo" 
+                     className="w-14 h-14 object-contain" 
+                 />
+             </div>
             <div className="w-full max-w-5xl mt-24">
                  <button onClick={onBack} className="flex items-center gap-2 text-zinc-300 hover:text-white transition-colors text-lg mb-4">
                      <i className="fas fa-arrow-left"></i>
@@ -288,9 +290,11 @@ const ProfilePage: React.FC = () => {
              return (
                 <div className="flex flex-col items-center justify-center min-h-screen p-4 text-white animate-fade-in bg-transparent">
                     <div className="absolute top-4 left-4">
-                        <div className="w-14 h-14 bg-red-600 flex items-center justify-center font-black text-5xl rounded-md" style={{fontFamily: "'Anton', sans-serif"}}>
-                            N
-                        </div>
+                        <img 
+                            src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
+                            alt="Logo" 
+                            className="w-14 h-14 object-contain" 
+                        />
                     </div>
                     <form onSubmit={handleSaveForm} className="w-full max-w-2xl">
                         <h1 className="text-4xl md:text-5xl font-normal mb-6">{t('editProfile')}</h1>
@@ -360,9 +364,11 @@ const ProfilePage: React.FC = () => {
             return (
                 <div className="flex flex-col items-center justify-center min-h-screen p-4 text-white animate-fade-in bg-transparent">
                      <div className="absolute top-4 left-4">
-                        <div className="w-14 h-14 bg-red-600 flex items-center justify-center font-black text-5xl rounded-md" style={{fontFamily: "'Anton', sans-serif"}}>
-                            N
-                        </div>
+                        <img 
+                            src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
+                            alt="Logo" 
+                            className="w-14 h-14 object-contain" 
+                        />
                     </div>
                     <form onSubmit={handleSaveForm} className="w-full max-w-2xl">
                         <h1 className="text-4xl md:text-5xl font-normal">{t('addProfile')}</h1>
