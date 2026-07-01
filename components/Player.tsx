@@ -509,6 +509,57 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         }
     }, [adState.isActive, adState.adIndex]);
 
+    const [showAutoSkipAlert, setShowAutoSkipAlert] = useState(false);
+    const [isAutoSkipAlertExiting, setIsAutoSkipAlertExiting] = useState(false);
+    const adTimerRef = useRef<any>(null);
+
+    // Track 10-second auto skip for ads
+    useEffect(() => {
+        if (adState.isActive) {
+            adTimerRef.current = setTimeout(() => {
+                if (adStateRef.current.isActive) {
+                    console.log("Ad auto-skipped after 10 seconds");
+                    
+                    setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
+                    videoRef.current?.play().catch(()=>{});
+
+                    // Explicitly focus player controls so focus is not lost on TV
+                    setTimeout(() => {
+                        const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
+                        if (controlsFocusables.length > 0) {
+                            controlsFocusables[0].focus();
+                        } else if (progressBarRef.current) {
+                            progressBarRef.current.focus();
+                        }
+                        setIsOverlayVisible(true);
+                    }, 100);
+
+                    setShowAutoSkipAlert(true);
+                    setIsAutoSkipAlertExiting(false);
+
+                    setTimeout(() => {
+                        setIsAutoSkipAlertExiting(true);
+                        setTimeout(() => {
+                            setShowAutoSkipAlert(false);
+                            setIsAutoSkipAlertExiting(false);
+                        }, 400);
+                    }, 4000);
+                }
+            }, 10000);
+        } else {
+            if (adTimerRef.current) {
+                clearTimeout(adTimerRef.current);
+                adTimerRef.current = null;
+            }
+        }
+
+        return () => {
+            if (adTimerRef.current) {
+                clearTimeout(adTimerRef.current);
+            }
+        };
+    }, [adState.isActive, adState.adIndex]);
+
     const [isBuffering, setIsBuffering] = useState(true);
     const [isOverlayVisible, setIsOverlayVisible] = useState(true);
     const [isRecsFocused, setIsRecsFocused] = useState(false);
@@ -1372,6 +1423,26 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
     return (
         <div ref={playerContainerRef} className="player-container-scope relative w-full h-full bg-black flex items-center justify-center overflow-hidden" onClick={togglePlay}>
+            {/* Auto Skip Ad Toast / Modal */}
+            {showAutoSkipAlert && (
+                <div 
+                    className={`absolute top-24 left-8 z-[200] max-w-sm flex items-center gap-3 bg-red-600/95 backdrop-blur-md text-white px-5 py-4 rounded-xl border border-red-500/50 shadow-2xl shadow-red-900/40 ${isAutoSkipAlertExiting ? 'animate-slide-out-left' : 'animate-slide-in-left'}`}
+                    style={{ direction: userLanguage === 'ar' ? 'rtl' : 'ltr' }}
+                >
+                    <div className="flex-shrink-0 w-10 h-10 bg-white/20 rounded-full flex items-center justify-center">
+                        <i className="fa-solid fa-circle-exclamation text-xl"></i>
+                    </div>
+                    <div>
+                        <h4 className="font-bold text-white text-base">
+                            {userLanguage === 'ar' ? 'تم تخطي الإعلان' : 'Ad Skipped'}
+                        </h4>
+                        <p className="text-sm text-red-100 font-medium">
+                            {userLanguage === 'ar' ? 'skipped ad automautcliy' : 'skipped ad automautcliy'}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {/* Ad Overlay */}
             {adState.isActive && (
                 <div className="absolute inset-0 z-[100] bg-black">
