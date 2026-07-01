@@ -29,7 +29,9 @@ const ChannelListPanel: React.FC<{
         const item = itemRefs.current[focusedIndex];
         if (item) {
           item.focus();
-          item.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          // TV browsers struggle with smooth scrolling; use snappy instant scrolling for TV.
+          const isTV = typeof navigator !== 'undefined' && /SmartTV|Tizen|Web0S|AppleTV|AndroidTV|TV|PlayStation/i.test(navigator.userAgent);
+          item.scrollIntoView({ behavior: isTV ? 'auto' : 'smooth', block: 'center' });
         } else {
           panelRef.current?.focus();
         }
