@@ -500,7 +500,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
     const AD_SOURCES = [
         "https://media.w3.org/2010/05/sintel/trailer.mp4?utm_source=chatgpt.com",
-        "https://rr7---sn-5abxgpxuxaxjvh-j1ae.googlevideo.com/videoplayback?expire=1782862368&ei=wP1DaqvSBoiUhcIPlcLe-Ak&ip=41.110.126.207&id=o-APwaxZfkaXGtmisLipcLXVwclVeNY9vBGaYd31WK14Kl&itag=299&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=292&met=1782840768%2C&mh=jE&mm=31%2C29&mn=sn-5abxgpxuxaxjvh-j1ae%2Csn-h5q7kned&ms=au%2Crdu&mv=m&mvi=7&pl=23&rms=au%2Cau&initcwndbps=576250&bui=ARmQxEVIX3PNIEFF_DhnLzxuOLPXFfqs-xOSRkwqBbLS1hQa2h7VWax4hSiXONifCUaH-IlC9FaSsufB&spc=SQ-umurvU3ICwW_HuF7-WyjTZ8_5Miw30lGI0-TykhC-&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=35473092&dur=153.340&lmt=1767239705822326&mt=1782840292&fvip=4&keepalive=yes&fexp=51565116%2C51565681%2C52017147&c=ANDROID_VR&txp=5532534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AHEqNM4wRQIgNESy7wlWJYfnje061LjDWs975tOYegZfvtStDJDwjI4CIQC79f6WqlxpGmyHxGjGywZZeRc7OU2cImEOWv5Mfl2ooQ%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgYKzfybAHaDpnDDjXm80r6kAl3jp4S4yPHuk0kwEIW1oCIQCLdayw-aw7gvDdAdZ96mtDVKOyrPI6JKET9LkYkJAsOg%3D%3D&cpn=zAw7EOY6o-kd4JSJ"
+        "https://media.w3.org/2010/05/sintel/trailer.mp4?utm_source=chatgpt.com"
     ];
 
     useEffect(() => {
@@ -1413,8 +1413,16 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             )}
 
             {/* FIX: The `inert` attribute expects a boolean value, not a string. */}
-            <div inert={isChannelListVisible ? true : undefined} className="absolute inset-0 w-full h-full">
-                <video ref={videoRef} className={`w-full h-full object-contain ${isEnhancementActive ? 'opacity-0' : ''}`} playsInline autoPlay preload="metadata">
+            <div inert={isChannelListVisible ? true : undefined} className="absolute inset-0 w-full h-full bg-black">
+                <video 
+                    ref={videoRef} 
+                    className={`w-full h-full object-contain bg-black ${isEnhancementActive ? 'opacity-0' : ''}`} 
+                    style={{ background: 'black' }}
+                    playsInline 
+                    autoPlay 
+                    preload="metadata"
+                    poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+                >
                 {vttTracks.map(track => (
                         <track key={track.lang} kind="subtitles" srcLang={track.lang} src={track.url} label={track.label} default={activeSubtitleLang === track.lang} />
                     ))}
