@@ -111,12 +111,26 @@ const App: React.FC = () => {
 
     const allFocusables = Array.from(navigationScope.querySelectorAll('.focusable:not([disabled])')) as HTMLElement[];
     const focusablesWithRects = allFocusables
-        .map(el => ({ el, rect: el.getBoundingClientRect() }))
-        .filter(({ el, rect }) => {
-            if (el.closest('[inert]')) return false;
-            const style = window.getComputedStyle(el);
-            return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
-        });
+        .map(el => {
+            if (el.closest('[inert]')) return null;
+
+            // Fast visibility check: offsetParent is null if the element or its parent has display: none.
+            // Fixed/sticky elements also have offsetParent = null, so we query computed style only if offsetParent is null.
+            if (el.offsetParent === null) {
+                const style = window.getComputedStyle(el);
+                if (style.display === 'none' || style.visibility === 'hidden') {
+                    return null;
+                }
+            }
+
+            const rect = el.getBoundingClientRect();
+            if (rect.width <= 0 || rect.height <= 0) {
+                return null;
+            }
+
+            return { el, rect };
+        })
+        .filter((item): item is { el: HTMLElement; rect: DOMRect } => item !== null);
 
     const currentIndex = focusablesWithRects.findIndex(({ el }) => el === currentElement);
     if (currentIndex === -1) return;
@@ -176,7 +190,9 @@ const App: React.FC = () => {
 
     if (bestCandidate) {
         bestCandidate.focus();
-        bestCandidate.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+        // TV browsers struggle immensely with smooth scrolling. Snappy instant scrolling is standard and extremely fast.
+        const isTV = showTvCursor || (typeof navigator !== 'undefined' && /SmartTV|Tizen|Web0S|AppleTV|AndroidTV|TV|PlayStation/i.test(navigator.userAgent));
+        bestCandidate.scrollIntoView({ behavior: isTV ? 'auto' : 'smooth', block: 'center', inline: 'nearest' });
     }
 }, [enterPressCount, showTvCursor, cursorPosition.x, cursorPosition.y]);
 
