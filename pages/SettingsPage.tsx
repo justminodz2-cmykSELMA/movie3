@@ -21,7 +21,7 @@ const SettingsRow: React.FC<{icon: string, title: string, subtitle?: string, chi
 }
 
 const SettingsPage: React.FC = () => {
-  const { isDarkMode, setDarkMode, clearAllData } = useProfile();
+  const { isDarkMode, setDarkMode, clearAllData, activeProfile, updateProfile } = useProfile();
   const { t, language, setLanguage } = useTranslation();
 
   const handleClearData = () => {
@@ -37,6 +37,27 @@ const SettingsPage: React.FC = () => {
         <h1 className="mb-8 text-3xl font-bold">{t('settings')}</h1>
 
         <div className="space-y-8">
+          {/* Active Profile Custom Gemini Key Section */}
+          {activeProfile && (
+            <section className="space-y-4">
+              <div className="p-4 bg-[var(--surface)] rounded-lg border border-[var(--border)]">
+                <div className="flex items-center gap-4 mb-3">
+                  <i className="fa-solid fa-key w-6 text-center text-xl text-[var(--primary)]"></i>
+                  <div>
+                    <h3 className="font-semibold text-white">{t('geminiApiKeyLabel')}</h3>
+                  </div>
+                </div>
+                <input
+                  type="text"
+                  value={activeProfile.geminiApiKey || ''}
+                  onChange={(e) => updateProfile(activeProfile.id, { geminiApiKey: e.target.value })}
+                  placeholder={t('geminiApiKeyPlaceholder')}
+                  className="w-full bg-black/30 border border-[var(--border)] px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none rounded-lg focusable"
+                />
+              </div>
+            </section>
+          )}
+
           {/* App Settings Section */}
           <section className="space-y-4">
              <SettingsRow icon="fa-solid fa-language" title={t('language')}>
