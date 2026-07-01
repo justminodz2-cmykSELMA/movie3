@@ -511,54 +511,56 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
     const [showAutoSkipAlert, setShowAutoSkipAlert] = useState(false);
     const [isAutoSkipAlertExiting, setIsAutoSkipAlertExiting] = useState(false);
-    const adTimerRef = useRef<any>(null);
 
-    // Track 10-second auto skip for ads
+    // Prevent browser scrolling via arrow keys/space while the video player is mounted
     useEffect(() => {
-        if (adState.isActive) {
-            adTimerRef.current = setTimeout(() => {
-                if (adStateRef.current.isActive) {
-                    console.log("Ad auto-skipped after 10 seconds");
-                    
-                    setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
-                    videoRef.current?.play().catch(()=>{});
-
-                    // Explicitly focus player controls so focus is not lost on TV
-                    setTimeout(() => {
-                        const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
-                        if (controlsFocusables.length > 0) {
-                            controlsFocusables[0].focus();
-                        } else if (progressBarRef.current) {
-                            progressBarRef.current.focus();
-                        }
-                        setIsOverlayVisible(true);
-                    }, 100);
-
-                    setShowAutoSkipAlert(true);
-                    setIsAutoSkipAlertExiting(false);
-
-                    setTimeout(() => {
-                        setIsAutoSkipAlertExiting(true);
-                        setTimeout(() => {
-                            setShowAutoSkipAlert(false);
-                            setIsAutoSkipAlertExiting(false);
-                        }, 400);
-                    }, 4000);
+        const preventScrollKeys = (e: KeyboardEvent) => {
+            const scrollKeys = ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' ', 'PageUp', 'PageDown', 'Home', 'End'];
+            if (scrollKeys.includes(e.key)) {
+                const target = e.target as HTMLElement;
+                if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT' || target.isContentEditable)) {
+                    return;
                 }
-            }, 10000);
-        } else {
-            if (adTimerRef.current) {
-                clearTimeout(adTimerRef.current);
-                adTimerRef.current = null;
-            }
-        }
-
-        return () => {
-            if (adTimerRef.current) {
-                clearTimeout(adTimerRef.current);
+                e.preventDefault();
             }
         };
-    }, [adState.isActive, adState.adIndex]);
+        window.addEventListener('keydown', preventScrollKeys, { passive: false });
+        return () => {
+            window.removeEventListener('keydown', preventScrollKeys);
+        };
+    }, []);
+
+    // Callback to trigger ad auto-skip after 30 seconds of actual continuous playback
+    const triggerAdAutoSkip = useCallback(() => {
+        if (adStateRef.current.isActive) {
+            console.log("Ad auto-skipped after 30 seconds of continuous playback");
+            
+            setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
+            videoRef.current?.play().catch(()=>{});
+
+            // Explicitly focus player controls so focus is not lost on TV
+            setTimeout(() => {
+                const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
+                if (controlsFocusables.length > 0) {
+                    controlsFocusables[0].focus();
+                } else if (progressBarRef.current) {
+                    progressBarRef.current.focus();
+                }
+                setIsOverlayVisible(true);
+            }, 100);
+
+            setShowAutoSkipAlert(true);
+            setIsAutoSkipAlertExiting(false);
+
+            setTimeout(() => {
+                setIsAutoSkipAlertExiting(true);
+                setTimeout(() => {
+                    setShowAutoSkipAlert(false);
+                    setIsAutoSkipAlertExiting(false);
+                }, 400);
+            }, 4000);
+        }
+    }, []);
 
     const [isBuffering, setIsBuffering] = useState(true);
     const [isOverlayVisible, setIsOverlayVisible] = useState(true);
@@ -1437,7 +1439,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                             {userLanguage === 'ar' ? 'تم تخطي الإعلان' : 'Ad Skipped'}
                         </h4>
                         <p className="text-sm text-red-100 font-medium">
-                            {userLanguage === 'ar' ? 'skipped ad automautcliy' : 'skipped ad automautcliy'}
+                            {userLanguage === 'ar' ? 'تم تخطي الإعلان تلقائياً بعد 30 ثانية' : 'Skipped ad automatically after 30s'}
                         </p>
                     </div>
                 </div>
@@ -1465,6 +1467,11 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                                 canSkip: newCountdown === 0,
                                 skipCountdown: newCountdown
                             }));
+
+                            // Auto skip if 30 continuous seconds of playback have passed
+                            if (adCur >= 30) {
+                                triggerAdAutoSkip();
+                            }
                         }}
                         onEnded={() => {
                             if (adState.adIndex < AD_SOURCES.length - 1) {
