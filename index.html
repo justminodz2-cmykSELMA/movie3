@@ -544,6 +544,22 @@
       .animate-keyboard-enter {
         animation: keyboard-slide-in 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
       }
+      
+      /* Left to Right Error-style slide-in animations */
+      @keyframes slide-in-left {
+        0% { transform: translateX(-110%); opacity: 0; }
+        100% { transform: translateX(0); opacity: 1; }
+      }
+      @keyframes slide-out-left {
+        0% { transform: translateX(0); opacity: 1; }
+        100% { transform: translateX(-110%); opacity: 0; }
+      }
+      .animate-slide-in-left {
+        animation: slide-in-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
+      .animate-slide-out-left {
+        animation: slide-out-left 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+      }
     </style>
   <script type="importmap">
 {
