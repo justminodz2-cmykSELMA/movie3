@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { fetchFromTMDB, fetchStreamUrl } from '../services/apiService';
 import { Movie, Episode, Season } from '../types';
@@ -65,6 +65,16 @@ const DetailsPage: React.FC = () => {
   const [selectedSeason, setSelectedSeason] = useState<number>(1);
   const [isOverviewExpanded, setOverviewExpanded] = useState(false);
   const [prefetchedStreamUrl, setPrefetchedStreamUrl] = useState<string | null>(null);
+  const playButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    if (!loading && item && type === 'movie') {
+      const timer = setTimeout(() => {
+        playButtonRef.current?.focus();
+      }, 500);
+      return () => clearTimeout(timer);
+    }
+  }, [loading, item, type]);
   
   useEffect(() => {
     const fetchDetails = async () => {
@@ -188,7 +198,9 @@ const DetailsPage: React.FC = () => {
                   <button 
                       key={tab.id}
                       onClick={() => setActiveTab(tab.id as any)}
-                      className={`relative py-3 text-sm font-bold transition-colors duration-300 ${activeTab === tab.id ? 'text-[var(--primary)]' : 'text-gray-400'}`}
+                      onKeyDown={(e) => e.key === 'Enter' && setActiveTab(tab.id as any)}
+                      className={`relative py-3 text-sm font-bold transition-colors duration-300 focusable ${activeTab === tab.id ? 'text-[var(--primary)]' : 'text-gray-400'}`}
+                      tabIndex={0}
                   >
                       {tab.label}
                       {activeTab === tab.id && <div className="absolute bottom-0 left-0 right-0 h-1 bg-[var(--primary)] rounded-full"></div>}
@@ -208,7 +220,7 @@ const DetailsPage: React.FC = () => {
     <Layout>
       <div className="relative w-full h-[50vh] min-h-[300px] md:h-[60vh]">
         <div className="absolute top-20 start-4 z-20 animate-fade-in" style={{animationDelay: '0.5s'}}>
-            <button onClick={() => navigate(-1)} className="w-10 h-10 text-white bg-black/50 rounded-full backdrop-blur-sm transition-transform btn-press"><i className="fa-solid fa-arrow-left"></i></button>
+            <button onClick={() => navigate(-1)} className="w-10 h-10 text-white bg-black/50 rounded-full backdrop-blur-sm transition-transform btn-press focusable" tabIndex={0}><i className="fa-solid fa-arrow-left"></i></button>
         </div>
         <img
           src={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${item.backdrop_path}`}
@@ -244,11 +256,11 @@ const DetailsPage: React.FC = () => {
 
         <div className="animate-fade-in-up" style={{animationDelay: '400ms'}}>
             <div className="flex gap-3 my-4">
-                <button onClick={handlePlay} className="flex-1 py-3 font-bold text-black bg-[var(--text-light)] rounded-lg transition-transform shadow-lg flex items-center justify-center gap-2 btn-press">
+                <button ref={playButtonRef} onClick={handlePlay} className="flex-1 py-3 font-bold text-black bg-[var(--text-light)] rounded-lg transition-transform shadow-lg flex items-center justify-center gap-2 btn-press focusable" tabIndex={0}>
                   <i className="fa-solid fa-play"></i>
                   <span>{type === 'movie' ? t('play') : t('playSeason')}</span>
                 </button>
-                <button onClick={() => toggleFavorite(item)} className={`w-28 h-12 rounded-lg transition-all duration-300 shadow-lg text-xs font-bold flex flex-col items-center justify-center btn-press ${isFav ? 'bg-[var(--secondary)] text-white' : 'bg-[var(--surface)] text-[var(--text-light)]'}`}>
+                <button onClick={() => toggleFavorite(item)} className={`w-28 h-12 rounded-lg transition-all duration-300 shadow-lg text-xs font-bold flex flex-col items-center justify-center btn-press focusable ${isFav ? 'bg-[var(--secondary)] text-white' : 'bg-[var(--surface)] text-[var(--text-light)]'}`} tabIndex={0}>
                   <i className={`fa-solid ${isFav ? 'fa-check' : 'fa-plus'} text-base`}></i>
                   <span className='mt-1'>{isFav ? t('addedToList') : t('addToList')}</span>
                 </button>
@@ -258,7 +270,9 @@ const DetailsPage: React.FC = () => {
         <div className="p-4 rounded-xl bg-[var(--surface)] animate-fade-in-up" style={{animationDelay: '500ms'}}>
             <p 
                 onClick={() => setOverviewExpanded(!isOverviewExpanded)} 
-                className={`text-sm text-[var(--text-dark)] cursor-pointer transition-all duration-300 ${!isOverviewExpanded ? 'line-clamp-3' : ''}`}
+                onKeyDown={(e) => e.key === 'Enter' && setOverviewExpanded(!isOverviewExpanded)}
+                className={`text-sm text-[var(--text-dark)] cursor-pointer transition-all duration-300 focusable ${!isOverviewExpanded ? 'line-clamp-3' : ''}`}
+                tabIndex={0}
             >
                 {item.overview}
             </p>
@@ -291,7 +305,14 @@ const DetailsPage: React.FC = () => {
             </div>
             <div className="flex flex-col gap-3">
               {episodes.map((episode, index) => (
-                <div key={episode.id} className="flex items-center gap-4 p-2 rounded-lg cursor-pointer bg-[var(--surface)] transition-colors hover:bg-[var(--surface)]/50 animate-fade-in-up" style={{ animationDelay: `${index * 40}ms` }} onClick={() => handleEpisodePlay(episode)}>
+                <div 
+                  key={episode.id} 
+                  className="flex items-center gap-4 p-2 rounded-lg cursor-pointer bg-[var(--surface)] transition-colors hover:bg-[var(--surface)]/50 animate-fade-in-up focusable" 
+                  style={{ animationDelay: `${index * 40}ms` }} 
+                  onClick={() => handleEpisodePlay(episode)}
+                  onKeyDown={(e) => { if (e.key === 'Enter') handleEpisodePlay(episode); }}
+                  tabIndex={0}
+                >
                   <div className="relative flex-shrink-0 w-32 h-20 overflow-hidden rounded-md">
                      <img src={episode.still_path ? `${IMAGE_BASE_URL}w300${episode.still_path}` : `${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${item.backdrop_path}`} 
                           srcSet={episode.still_path ? `${IMAGE_BASE_URL}w185${episode.still_path} 185w, ${IMAGE_BASE_URL}w300${episode.still_path} 300w` : undefined}
