@@ -172,6 +172,7 @@ export interface Profile {
   subtitleSettings?: SubtitleSettings;
   videoFilters?: VideoFilters;
   serverPreferences?: string[];
+  geminiApiKey?: string;
 }
 
 export interface AccountData {
