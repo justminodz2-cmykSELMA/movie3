@@ -64,9 +64,11 @@ const TopNavbar: React.FC = () => {
         >
           <i className="fas fa-search"></i>
         </button>
-        <div className="w-9 h-9 bg-red-600 flex items-center justify-center font-bold text-2xl rounded-md" style={{fontFamily: "'Anton', sans-serif"}}>
-          V
-        </div>
+        <img 
+          src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
+          alt="Logo" 
+          className="w-14 h-15 object-contain" 
+        />
       </div>
     </header>
   );
