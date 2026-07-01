@@ -235,7 +235,9 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
             if (element && element.offsetParent !== null) {
                 element.focus({ preventScroll: true });
                 // Custom scroll to ensure visibility without jarring jumps
-                element.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'nearest' });
+                // TV browsers are laggy with smooth scrolling. Snappy instant scrolling is standard.
+                const isTV = typeof navigator !== 'undefined' && /SmartTV|Tizen|Web0S|AppleTV|AndroidTV|TV|PlayStation/i.test(navigator.userAgent);
+                element.scrollIntoView({ behavior: isTV ? 'auto' : 'smooth', block: 'nearest', inline: 'nearest' });
             }
         };
 
@@ -283,7 +285,8 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
             switch (group) {
                 case 'top-right':
                     if (e.key === 'ArrowUp') {
-                        scrollContainerRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
+                        const isTV = typeof navigator !== 'undefined' && /SmartTV|Tizen|Web0S|AppleTV|AndroidTV|TV|PlayStation/i.test(navigator.userAgent);
+                        scrollContainerRef.current?.scrollTo({ top: 0, behavior: isTV ? 'auto' : 'smooth' });
                     } else if (e.key === 'ArrowRight' && index === 0) {
                         focusAndScroll(getElement(`[data-focus-group="top-right"][data-focus-index="1"]`));
                     } else if (e.key === 'ArrowLeft' && index === 1) {
