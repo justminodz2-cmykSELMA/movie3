@@ -11,7 +11,7 @@ interface ProfileContextType {
   setToast: (toast: { message: string, type: 'success' | 'error' | 'info' } | null) => void;
   selectProfile: (profileId: string) => void;
   addProfile: (profile: Omit<Profile, 'id' | 'favorites' | 'history' | 'lastSearches' | 'downloads'>) => Profile | undefined;
-  updateProfile: (profileId: string, updates: Partial<Pick<Profile, 'name' | 'avatar' | 'type'>>) => void;
+  updateProfile: (profileId: string, updates: Partial<Pick<Profile, 'name' | 'avatar' | 'type' | 'geminiApiKey'>>) => void;
   deleteProfile: (profileId: string) => void;
   getScreenSpecificData: <K extends keyof Profile>(key: K, defaultValue: Profile[K]) => Profile[K];
   setScreenSpecificData: <K extends keyof Profile>(key: K, value: Profile[K] | ((prev: Profile[K]) => Profile[K])) => void;
@@ -180,6 +180,7 @@ export const ProfileProvider: React.FC<{ children: ReactNode }> = ({ children })
         downloads: [],
         followedActors: [],
         serverPreferences: [],
+        geminiApiKey: profileData.geminiApiKey || '',
       };
       const newData = { ...accountData, screens: [...accountData.screens, newProfile] };
       updateAccountData(newData);
@@ -189,7 +190,7 @@ export const ProfileProvider: React.FC<{ children: ReactNode }> = ({ children })
     return undefined;
   }, [accountData, updateAccountData, t]);
   
-  const updateProfile = useCallback((profileId: string, updates: Partial<Pick<Profile, 'name' | 'avatar' | 'type'>>) => {
+  const updateProfile = useCallback((profileId: string, updates: Partial<Pick<Profile, 'name' | 'avatar' | 'type' | 'geminiApiKey'>>) => {
     if (accountData) {
       const newScreens = accountData.screens.map(p => p.id === profileId ? { ...p, ...updates } : p);
       const newData = { ...accountData, screens: newScreens };
