@@ -30,23 +30,24 @@ const AmbientBackground: React.FC<{ imageUrl: string | null }> = ({
       <AnimatePresence mode="popLayout">
         <motion.div
           key={imageUrl}
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 0.48, scale: 1 }}
-          exit={{ opacity: 0, scale: 1.05 }}
-          transition={{ duration: 0.9, ease: "easeInOut" }}
-          className="absolute -top-[15%] -right-[15%] w-[85vw] h-[85vw] max-w-[950px] max-h-[950px] rounded-full overflow-hidden blur-[130px] saturate-[2.4]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 0.38 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.8, ease: "easeInOut" }}
+          style={{ willChange: "opacity" }}
+          className="absolute -top-[10%] -right-[10%] w-[65vw] h-[65vw] max-w-[700px] max-h-[700px] rounded-full overflow-hidden blur-[80px] saturate-[1.6] transform-gpu pointer-events-none"
         >
           <img
             src={imageUrl}
             alt="Dynamic Ambient Background"
-            className="w-full h-full object-cover"
+            className="w-full h-full object-cover pointer-events-none"
           />
         </motion.div>
       </AnimatePresence>
 
       {/* Background gradients for excellent reading contrast & blending */}
-      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/75 to-[var(--background)]" />
-      <div className="absolute inset-0 bg-gradient-to-r from-[var(--background)] via-[var(--background)]/40 to-transparent" />
+      <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[var(--background)]/75 to-[var(--background)] pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-r from-[var(--background)] via-[var(--background)]/40 to-transparent pointer-events-none" />
     </div>
   );
 };
@@ -1159,6 +1160,16 @@ const HomePage: React.FC = () => {
   const { t, language } = useTranslation();
   const navigate = useNavigate();
 
+  const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (focusTimeoutRef.current) {
+        clearTimeout(focusTimeoutRef.current);
+      }
+    };
+  }, []);
+
   const handleOpenModal = (item: Movie) => {
     setModalItem(item);
   };
@@ -1177,22 +1188,28 @@ const HomePage: React.FC = () => {
     });
   };
 
-  const handleItemFocus = (item: any) => {
+  const handleItemFocus = useCallback((item: any) => {
     if (!item) {
       // Do not reset focus image on blur for smoother experience
       return;
     }
 
-    if (item.backdrop_path) {
-      setFocusedImage(
-        `${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${item.backdrop_path}`,
-      );
-    } else if (item.logo) {
-      setFocusedImage(item.logo);
-    } else if (item.poster_path) {
-      setFocusedImage(`${IMAGE_BASE_URL}${POSTER_SIZE}${item.poster_path}`);
+    if (focusTimeoutRef.current) {
+      clearTimeout(focusTimeoutRef.current);
     }
-  };
+
+    focusTimeoutRef.current = setTimeout(() => {
+      if (item.backdrop_path) {
+        setFocusedImage(
+          `${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${item.backdrop_path}`,
+        );
+      } else if (item.logo) {
+        setFocusedImage(item.logo);
+      } else if (item.poster_path) {
+        setFocusedImage(`${IMAGE_BASE_URL}${POSTER_SIZE}${item.poster_path}`);
+      }
+    }, 250); // 250ms debounce to prevent layout re-paint thrashing during rapid scroll/hover
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
