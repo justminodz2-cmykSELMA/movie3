@@ -182,7 +182,7 @@ const SearchResultCard: React.FC<{ movie: Movie; index: number }> = ({ movie, in
 
 const AISearchPage: React.FC = () => {
     const { t } = useTranslation();
-    const { setModalItem } = useProfile();
+    const { setModalItem, activeProfile } = useProfile();
     const [messages, setMessages] = useState<ChatMessage[]>(() => [
         { id: 'initial', role: 'model', content: t('aiGreeting'), isNew: true }
     ]);
@@ -192,10 +192,15 @@ const AISearchPage: React.FC = () => {
     const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
     const chatEndRef = useRef<HTMLDivElement>(null);
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const activeApiKey = useMemo(() => {
+        return activeProfile?.geminiApiKey || process.env.API_KEY || process.env.GEMINI_API_KEY;
+    }, [activeProfile]);
+
     const ai = useMemo(() => {
-        if (!process.env.API_KEY) return null;
-        return new GoogleGenAI({ apiKey: process.env.API_KEY });
-    }, []);
+        if (!activeApiKey) return null;
+        return new GoogleGenAI({ apiKey: activeApiKey });
+    }, [activeApiKey]);
 
     const handleMessageAnimationComplete = (id: string) => {
         setMessages(prev => prev.map(msg => msg.id === id ? { ...msg, isNew: false } : msg));
@@ -303,8 +308,14 @@ const AISearchPage: React.FC = () => {
              <Layout>
                 <div className="pt-24 px-4 flex justify-center text-center">
                     <div className="w-full max-w-2xl bg-[var(--surface)] rounded-2xl p-8">
-                        <h2 className="text-2xl font-bold text-red-500">Configuration Error</h2>
-                        <p className="mt-4 text-zinc-300">The Gemini API key is not configured. Please set the `GEMINI_API_KEY` environment variable to use this feature.</p>
+                        <h2 className="text-2xl font-bold text-red-500">
+                            {t('languageName') === 'العربية' ? 'خطأ في الإعداد' : 'Configuration Error'}
+                        </h2>
+                        <p className="mt-4 text-zinc-300">
+                            {t('languageName') === 'العربية' 
+                                ? 'مفتاح Gemini API غير مهيأ. يرجى إضافة مفتاح Gemini API الخاص بك في قسم "إدارة الملفات الشخصية" لتعديل ملفك الشخصي والتمكن من استخدام هذه الميزة.' 
+                                : 'The Gemini API key is not configured. Please add your own Gemini API key under "Manage Profiles" (Edit Profile) to use this feature.'}
+                        </p>
                     </div>
                 </div>
             </Layout>
