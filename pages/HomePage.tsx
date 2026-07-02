@@ -17,7 +17,7 @@ import {
   BACKDROP_SIZE_MEDIUM,
   POSTER_SIZE,
 } from "../contexts/constants";
-import { fetchRandomCategoryChannels, IptvChannel } from "../services/iptvService";
+import { fetchRandomCategoryChannels, IptvChannel, getProxiedStreamUrl } from "../services/iptvService";
 
 const AmbientBackground: React.FC<{ imageUrl: string | null }> = ({
   imageUrl,
@@ -897,12 +897,19 @@ const LiveTvCard: React.FC<{
     }
 
     if (channel.streamUrl) {
+      const proxiedChannels = allChannels ? allChannels.map(c => ({
+        ...c,
+        streamUrl: getProxiedStreamUrl(c.streamUrl)
+      })) : undefined;
+
+      const proxiedUrl = getProxiedStreamUrl(channel.streamUrl);
+
       if (channel.playerType === "iframe") {
         navigate("/iframe-player", {
           state: {
             item: { id: channel.id, name: channel.name, title: channel.name },
-            streamUrl: channel.streamUrl,
-            liveChannels: allChannels,
+            streamUrl: proxiedUrl,
+            liveChannels: proxiedChannels,
             currentChannelIndex: index,
             logo: channel.logo,
           },
@@ -912,8 +919,8 @@ const LiveTvCard: React.FC<{
           state: {
             item: { id: channel.id, name: channel.name, title: channel.name },
             type: "movie",
-            streamUrl: channel.streamUrl,
-            liveChannels: allChannels,
+            streamUrl: proxiedUrl,
+            liveChannels: proxiedChannels,
             currentChannelIndex: index,
             logo: channel.logo,
             needsProxy: channel.needsProxy,
