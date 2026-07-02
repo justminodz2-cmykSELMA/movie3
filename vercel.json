@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/proxy-ugeen/:path*",
+      "destination": "http://ugeen.live:8080/:path*"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
