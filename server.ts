@@ -98,6 +98,11 @@ async function startServer() {
             return;
           }
 
+          // Disable buffering to allow live response streaming
+          res.setHeader("X-Accel-Buffering", "no");
+          res.setHeader("Cache-Control", "no-cache, no-transform");
+          res.setHeader("Connection", "keep-alive");
+
           // Copy headers to allow range requests and video streaming
           if (remoteResponse.headers["content-type"]) {
             res.setHeader("Content-Type", remoteResponse.headers["content-type"]);
