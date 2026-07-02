@@ -68,13 +68,13 @@ const DetailsPage: React.FC = () => {
   const playButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
-    if (!loading && item && type === 'movie') {
+    if (!loading && item) {
       const timer = setTimeout(() => {
-        playButtonRef.current?.focus();
-      }, 500);
+        playButtonRef.current?.focus({ preventScroll: true });
+      }, 800);
       return () => clearTimeout(timer);
     }
-  }, [loading, item, type]);
+  }, [loading, item]);
   
   useEffect(() => {
     const fetchDetails = async () => {
