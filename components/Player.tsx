@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Hls from 'hls.js';
+import mpegts from 'mpegts.js';
 import { Movie, Episode, SubtitleTrack, SubtitleSettings, StreamLink } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
@@ -29,6 +30,7 @@ interface PlayerProps {
     liveChannels?: any[];
     currentChannelIndex?: number;
     logo?: string;
+    hideLogo?: boolean;
     isLiveScheduleMode?: boolean;
     onVideoEnded?: () => void;
     liveReason?: string;
@@ -115,7 +117,18 @@ const ChannelListPanel: React.FC<{
             onClick={() => onSelect(index)}
             className="w-full flex items-center gap-4 p-3 my-1 rounded-lg text-left transition-colors duration-200 focus:outline-none focus:bg-white/20 hover:bg-white/10"
           >
-            <img src={channel.logo} alt={channel.name} className="w-16 h-12 object-contain flex-shrink-0 rounded-md bg-zinc-700 p-1" />
+            <img 
+              src={channel.logo} 
+              alt={channel.name} 
+              className="w-16 h-12 object-contain flex-shrink-0 rounded-md bg-zinc-700 p-1" 
+              onError={(e) => {
+                const target = e.currentTarget;
+                target.onerror = null;
+                const cleanName = channel.name.replace(/^(AR|FR|EN|ES|DE|IT|UK|US|MA|TN|DZ|LY|SY|LB|ZA|PT|TR|AL|PL|RO|RU|KSA|OSN|beIN|MBC|TOD|BTV|OCS|Starz|Dragon|Hulu|Skyflix|ART|Rotana|ON|DMC|CBC|Al Alhy|Zamalek|Nile|Sada Elbalad|Star|Paramount|Comedy|TNT|HBO|ESPN|Fox|Sony|ZDF|RTL|SAT|Pro7|Super RTL|Vox|VOX|Kika|Arte|TF1|M6|W9|RMC|BFM|LCI|DAZN|TMC|France)\s*:\s*/i, '').trim();
+                const letter = cleanName.charAt(0).toUpperCase() || '📺';
+                target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" rx="10" fill="%23eab308"/><text x="50" y="55" font-family="sans-serif" font-size="45" font-weight="bold" fill="%23000000" text-anchor="middle" dominant-baseline="middle">${letter}</text></svg>`;
+              }}
+            />
             <span className="text-white font-semibold truncate">{channel.name}</span>
           </button>
         ))}
@@ -448,7 +461,7 @@ const SettingsPanel: React.FC<{
     );
 };
 
-const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, initialEpisode, initialTime, initialStreamUrl, onProviderSelected, onStreamFetchStateChange, setVideoNode, serverPreferences, episodes, onEpisodeSelect, selectedProvider, liveChannels, currentChannelIndex, logo, isLiveScheduleMode, onVideoEnded, liveReason, needsProxy }) => {
+const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, initialEpisode, initialTime, initialStreamUrl, onProviderSelected, onStreamFetchStateChange, setVideoNode, serverPreferences, episodes, onEpisodeSelect, selectedProvider, liveChannels, currentChannelIndex, logo, hideLogo, isLiveScheduleMode, onVideoEnded, liveReason, needsProxy }) => {
     const navigate = useNavigate();
     const { setToast, getScreenSpecificData, setScreenSpecificData } = useProfile();
     const { t, language: userLanguage } = useTranslation();
@@ -598,6 +611,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
     const [isMuted, setIsMuted] = useState(true);
     const hlsRef = useRef<Hls.default | null>(null);
+    const mpegtsRef = useRef<any>(null);
     const [isEnhancementActive, setIsEnhancementActive] = useState(false);
     const enhancementCanvasRef = useRef<HTMLCanvasElement>(null);
     const enhancementAnimFrame = useRef<number>(0);
@@ -627,6 +641,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             liveChannels: liveChannels,
             currentChannelIndex: index,
             logo: nextChannel.logo,
+            hideLogo: hideLogo,
             needsProxy: nextChannel.needsProxy,
         };
     
@@ -801,6 +816,18 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         }
         if (hlsRef.current) {
             hlsRef.current.destroy();
+            hlsRef.current = null;
+        }
+        if (mpegtsRef.current) {
+            try {
+                mpegtsRef.current.pause();
+                mpegtsRef.current.unload();
+                mpegtsRef.current.detachMediaElement();
+                mpegtsRef.current.destroy();
+            } catch (e) {
+                console.error("Error destroying mpegts player:", e);
+            }
+            mpegtsRef.current = null;
         }
         const hls = new Hls.default();
         hlsRef.current = hls;
@@ -873,6 +900,40 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 video.currentTime = savedTime;
                 video.play().catch(() => {});
             });
+        } else if (activeStreamUrl.includes('/api/live-proxy') && !activeStreamUrl.match(/\.(mp4|mkv|webm)$/i) && mpegts.isSupported()) {
+            const player = mpegts.createPlayer({
+                type: 'mpegts',
+                isLive: true,
+                url: activeStreamUrl,
+            }, {
+                enableWorker: false,
+                lazyLoad: false,
+                liveBufferLatencyChasing: true,
+                liveBufferLatencyMaxLatency: 3,
+                liveBufferLatencyMinRemain: 1
+            });
+            mpegtsRef.current = player;
+            
+            player.on(mpegts.Events.ERROR, (errorType, errorDetail, errorInfo) => {
+                console.error("MpegTS Error:", errorType, errorDetail, errorInfo);
+                setToast({ message: `MPEG-TS Error: ${errorType} - ${errorDetail}`, type: 'error' });
+            });
+
+            player.on(mpegts.Events.MEDIA_INFO, (mediaInfo) => {
+                console.log("MpegTS Media Info:", mediaInfo);
+            });
+
+            player.attachMediaElement(video);
+            player.load();
+            
+            // Wait for media info before playing to avoid interruption
+            const playPromise = player.play();
+            if (playPromise !== undefined) {
+                playPromise.catch(error => {
+                    console.warn("MpegTS autoplay prevented or interrupted:", error);
+                    // Often just an interruption, the video will still play once buffered if autoPlay is set
+                });
+            }
         } else {
             video.src = activeStreamUrl;
             video.addEventListener('loadeddata', () => {
@@ -880,7 +941,20 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 video.play().catch(error => console.warn("Autoplay was prevented.", error));
             }, { once: true });
         }
-        return () => hlsRef.current?.destroy();
+        return () => {
+            hlsRef.current?.destroy();
+            if (mpegtsRef.current) {
+                try {
+                    mpegtsRef.current.pause();
+                    mpegtsRef.current.unload();
+                    mpegtsRef.current.detachMediaElement();
+                    mpegtsRef.current.destroy();
+                } catch (e) {
+                    console.error("Error destroying mpegts player:", e);
+                }
+                mpegtsRef.current = null;
+            }
+        };
     }, [activeStreamUrl, needsProxy]);
 
     // Effect for handling quality changes
@@ -1520,31 +1594,20 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                         onClick={(e) => {
                             e.stopPropagation();
                             if (adState.canSkip) {
-                                if (adState.adIndex < AD_SOURCES.length - 1) {
-                                    // Next Ad
-                                    setAdState(prev => ({
-                                        ...prev,
-                                        adIndex: prev.adIndex + 1,
-                                        canSkip: false,
-                                        skipCountdown: 5,
-                                        adProgress: 0
-                                    }));
-                                } else {
-                                    // End of all ads
-                                    setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
-                                    videoRef.current?.play().catch(()=>{});
+                                // End of all ads
+                                setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
+                                videoRef.current?.play().catch(()=>{});
 
-                                    // Explicitly focus a player control button so focus is never lost
-                                    setTimeout(() => {
-                                        const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
-                                        if (controlsFocusables.length > 0) {
-                                            controlsFocusables[0].focus({ preventScroll: true });
-                                        } else if (progressBarRef.current) {
-                                            progressBarRef.current.focus({ preventScroll: true });
-                                        }
-                                        setIsOverlayVisible(true);
-                                    }, 100);
-                                }
+                                // Explicitly focus a player control button so focus is never lost
+                                setTimeout(() => {
+                                    const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
+                                    if (controlsFocusables.length > 0) {
+                                        controlsFocusables[0].focus({ preventScroll: true });
+                                    } else if (progressBarRef.current) {
+                                        progressBarRef.current.focus({ preventScroll: true });
+                                    }
+                                    setIsOverlayVisible(true);
+                                }, 100);
                             }
                         }}
                     >
@@ -1569,8 +1632,15 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     style={{ background: 'black' }}
                     playsInline 
                     autoPlay 
+                    muted={isMuted}
                     preload="metadata"
                     poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
+                    onWaiting={() => setIsBuffering(true)}
+                    onPlaying={() => setIsBuffering(false)}
+                    onError={(e) => {
+                        console.error("Video element error:", videoRef.current?.error);
+                        setIsBuffering(false);
+                    }}
                 >
                 {vttTracks.map(track => (
                         <track key={track.lang} kind="subtitles" srcLang={track.lang} src={track.url} label={track.label} default={activeSubtitleLang === track.lang} />
@@ -1612,7 +1682,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     </div>
                 )}
 
-                {(logo || isLiveScheduleMode) && (
+                {((!hideLogo && logo) || isLiveScheduleMode) && (
                     <div className={`absolute top-4 left-4 z-20 transition-opacity duration-300 ${isOverlayVisible ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                         {isLiveScheduleMode ? (
                             <div className="px-3 py-1.5 bg-black/50 backdrop-blur-md rounded-lg flex items-center gap-2">
@@ -1620,7 +1690,18 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                                 <span className="font-bold text-white uppercase tracking-wider">{t('live')}</span>
                             </div>
                         ) : (
-                             <img src={logo} alt={`${item.name} logo`} className="h-20 max-w-[240px] object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]" />
+                             <img 
+                               src={logo} 
+                               alt={`${item.name} logo`} 
+                               className="h-20 max-w-[240px] object-contain drop-shadow-[0_4px_8px_rgba(0,0,0,0.8)]" 
+                               onError={(e) => {
+                                 const target = e.currentTarget;
+                                 target.onerror = null;
+                                 const cleanName = item.name.replace(/^(AR|FR|EN|ES|DE|IT|UK|US|MA|TN|DZ|LY|SY|LB|ZA|PT|TR|AL|PL|RO|RU|KSA|OSN|beIN|MBC|TOD|BTV|OCS|Starz|Dragon|Hulu|Skyflix|ART|Rotana|ON|DMC|CBC|Al Alhy|Zamalek|Nile|Sada Elbalad|Star|Paramount|Comedy|TNT|HBO|ESPN|Fox|Sony|ZDF|RTL|SAT|Pro7|Super RTL|Vox|VOX|Kika|Arte|TF1|M6|W9|RMC|BFM|LCI|DAZN|TMC|France)\s*:\s*/i, '').trim();
+                                 const letter = cleanName.charAt(0).toUpperCase() || '📺';
+                                 target.src = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100"><rect width="100" height="100" rx="10" fill="%23eab308"/><text x="50" y="55" font-family="sans-serif" font-size="45" font-weight="bold" fill="%23000000" text-anchor="middle" dominant-baseline="middle">${letter}</text></svg>`;
+                               }}
+                             />
                         )}
                     </div>
                 )}
@@ -1905,7 +1986,7 @@ const Controls: React.FC<any> = ({
     }, [duration, skipSegments]);
 
     return (
-        <div className={`absolute inset-x-0 bottom-0 text-white transition-all duration-300 ease-in-out flex flex-col ${showControls ? `opacity-100 ${!hasRecs || isRecsFocused ? 'translate-y-0' : 'translate-y-28'}` : 'opacity-0 pointer-events-none translate-y-full'}`} onClick={(e) => e.stopPropagation()}>
+        <div className={`absolute inset-x-0 bottom-0 text-white transition-all duration-300 ease-in-out flex flex-col ${showControls ? `opacity-100 ${!hasRecs || isRecsFocused ? 'translate-y-0' : 'translate-y-28'}` : 'opacity-0 pointer-events-none translate-y-8'}`} onClick={(e) => e.stopPropagation()}>
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-black/20 to-transparent pointer-events-none"></div>
             
             <div className="relative p-4 lg:p-6 pb-8 lg:pb-10 flex flex-col gap-4">
