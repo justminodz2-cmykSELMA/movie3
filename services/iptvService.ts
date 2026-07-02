@@ -51,6 +51,13 @@ export const getProxiedStreamUrl = (url: string): string => {
   if (!url) return url;
   // Don't proxy m3u8 URLs through the live-proxy, as HLS.js needs to resolve relative paths
   if (url.includes('.m3u8')) return url;
+  
+  // Use Vercel network rewrite for ugeen.live to bypass serverless function limits
+  if (url.includes('ugeen.live:8080/')) {
+    const path = url.split('ugeen.live:8080/')[1];
+    return `/proxy-ugeen/${path}`;
+  }
+  
   if (url.startsWith('http://') || url.includes('ugeen.live')) {
     return `/api/live-proxy?url=${encodeURIComponent(url)}`;
   }
