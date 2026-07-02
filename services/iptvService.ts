@@ -5,6 +5,7 @@ export interface IptvCategory {
 }
 
 export const iptvCategories: IptvCategory[] = [
+  { name: 'Main (Ugeen)', count: 0, url: 'https://ugeen.live/get.php?username=Ugeen_VIPpHH2vT&password=qTMubv&type=m3u&output=ts' },
   { name: 'All Channels', count: 0, url: 'https://iptv-org.github.io/iptv/index.m3u' },
   { name: 'Animation', count: 170, url: 'https://iptv-org.github.io/iptv/categories/animation.m3u' },
   { name: 'Auto', count: 30, url: 'https://iptv-org.github.io/iptv/categories/auto.m3u' },
@@ -45,6 +46,16 @@ export interface IptvChannel {
   group: string;
   playerType?: 'hls' | 'iframe';
 }
+
+export const getProxiedStreamUrl = (url: string): string => {
+  if (!url) return url;
+  // Don't proxy m3u8 URLs through the live-proxy, as HLS.js needs to resolve relative paths
+  if (url.includes('.m3u8')) return url;
+  if (url.startsWith('http://') || url.includes('ugeen.live')) {
+    return `/api/live-proxy?url=${encodeURIComponent(url)}`;
+  }
+  return url;
+};
 
 export const parseM3u = (m3uText: string): IptvChannel[] => {
   const lines = m3uText.split('\n');
