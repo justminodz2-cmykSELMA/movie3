@@ -1,22 +1,27 @@
-import { IncomingMessage, ServerResponse } from "http";
+export const config = {
+  runtime: 'edge',
+};
 
-export default async function handler(req: any, res: any) {
-  // Add CORS headers
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "*");
+export default async function handler(req: Request) {
+  const corsHeaders = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers": "*",
+  };
   
   if (req.method === "OPTIONS") {
-    return res.status(200).end();
+    return new Response(null, { status: 200, headers: corsHeaders });
   }
 
-  const targetUrl = req.query.url as string;
+  const urlObj = new URL(req.url);
+  const targetUrl = urlObj.searchParams.get("url");
+
   if (!targetUrl) {
-    return res.status(400).send("Missing url parameter");
+    return new Response("Missing url parameter", { status: 400, headers: corsHeaders });
   }
 
   try {
-    console.log(`[M3U Proxy Vercel] Fetching playlist: ${targetUrl}`);
+    console.log(`[M3U Proxy Edge] Fetching playlist: ${targetUrl}`);
     const response = await fetch(targetUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36'
@@ -28,10 +33,18 @@ export default async function handler(req: any, res: any) {
     }
 
     const text = await response.text();
-    res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.status(200).send(text);
+    const newHeaders = new Headers(corsHeaders);
+    newHeaders.set("Content-Type", "text/plain; charset=utf-8");
+
+    return new Response(text, {
+      status: 200,
+      headers: newHeaders,
+    });
   } catch (error: any) {
-    console.error("[M3U Proxy Vercel] Error:", error.message);
-    res.status(500).send(`Failed to fetch playlist: ${error.message}`);
+    console.error("[M3U Proxy Edge] Error:", error.message);
+    return new Response(`Failed to fetch playlist: ${error.message}`, {
+      status: 500,
+      headers: corsHeaders,
+    });
   }
 }
