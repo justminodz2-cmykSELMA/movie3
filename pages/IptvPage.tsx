@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Layout from '../components/Layout';
-import { iptvCategories, fetchRandomCategoryChannels, parseM3u, IptvChannel, IptvCategory } from '../services/iptvService';
+import { iptvCategories, fetchRandomCategoryChannels, parseM3u, IptvChannel, IptvCategory, getProxiedStreamUrl } from '../services/iptvService';
 import { useTranslation } from '../contexts/LanguageContext';
 
 const IptvPage: React.FC = () => {
@@ -12,6 +12,7 @@ const IptvPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(false);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [categorySearchQuery, setCategorySearchQuery] = useState<string>('');
+  const [failedLogos, setFailedLogos] = useState<Record<string, boolean>>({});
   
   const filteredCategories = useMemo(() => {
     if (!categorySearchQuery) return iptvCategories;
@@ -24,8 +25,14 @@ const IptvPage: React.FC = () => {
     const fetchChannels = async () => {
       setLoading(true);
       try {
-        const response = await fetch(selectedCategory.url);
+        let urlToFetch = selectedCategory.url;
+        
+        // Always route through our backend proxy to completely avoid CORS and Mixed-content errors
+        urlToFetch = `/api/m3u-proxy?url=${encodeURIComponent(urlToFetch)}`;
+        
+        const response = await fetch(urlToFetch);
         if (!response.ok) throw new Error('Failed to fetch');
+        
         const text = await response.text();
         const parsedChannels = parseM3u(text);
         if (isMounted) setChannels(parsedChannels);
@@ -51,12 +58,20 @@ const IptvPage: React.FC = () => {
 
   const handlePlayChannel = (channel: IptvChannel) => {
     const originalIndex = channels.findIndex(c => c.id === channel.id);
+    
+    // Ensure all URLs passed to the player are proxied so they play perfectly
+    const proxiedChannels = channels.map(c => ({
+      ...c,
+      streamUrl: getProxiedStreamUrl(c.streamUrl)
+    }));
+
     const state = {
-      item: { id: channel.id, name: channel.name, title: channel.name },
-      streamUrl: channel.streamUrl,
-      liveChannels: channels,
+      item: { id: channel.id, name: channel.name, title: channel.name, logo: channel.logo },
+      streamUrl: getProxiedStreamUrl(channel.streamUrl),
+      liveChannels: proxiedChannels,
       currentChannelIndex: originalIndex !== -1 ? originalIndex : 0,
       logo: channel.logo,
+      hideLogo: selectedCategory.name === 'Main (Ugeen)',
       needsProxy: false,
     };
     if (channel.playerType === 'iframe') {
@@ -64,6 +79,37 @@ const IptvPage: React.FC = () => {
     } else {
       navigate('/player', { state: { ...state, type: 'movie' } });
     }
+  };
+
+  const renderChannelLogo = (channel: IptvChannel) => {
+    const isPlaceholder = !channel.logo || channel.logo.includes('placeholder.com') || channel.logo.includes('via.placeholder');
+    const hasFailed = failedLogos[channel.id];
+    
+    if (isPlaceholder || hasFailed) {
+      // Strip language tag prefixes and get first letter
+      const cleanName = channel.name
+        .replace(/^(AR|FR|EN|ES|DE|IT|UK|US|MA|TN|DZ|LY|SY|LB|ZA|PT|TR|AL|PL|RO|RU|KSA|OSN|beIN|MBC|TOD|BTV|OCS|Starz|Dragon|Hulu|Skyflix|ART|Rotana|ON|DMC|CBC|Al Alhy|Zamalek|Nile|Sada Elbalad|Star|Paramount|Comedy|TNT|HBO|ESPN|Fox|Sony|ZDF|RTL|SAT|Pro7|Super RTL|Vox|VOX|Kika|Arte|TF1|M6|W9|RMC|BFM|LCI|DAZN|TMC|France)\s*:\s*/i, '')
+        .trim();
+      const firstLetter = cleanName.charAt(0).toUpperCase() || '📺';
+      
+      return (
+        <div className="w-full h-full rounded bg-gradient-to-br from-amber-400 via-yellow-400 to-yellow-500 flex flex-col items-center justify-center text-zinc-950 font-bold select-none p-1 shadow-inner shadow-yellow-300">
+          <span className="text-2xl drop-shadow-sm font-extrabold">{firstLetter}</span>
+          <span className="text-[9px] uppercase tracking-wider opacity-80 font-mono -mt-1">TV</span>
+        </div>
+      );
+    }
+    
+    return (
+      <img 
+        src={channel.logo} 
+        alt={channel.name} 
+        className="max-w-full max-h-full object-contain"
+        onError={() => {
+          setFailedLogos(prev => ({ ...prev, [channel.id]: true }));
+        }}
+      />
+    );
   };
 
   return (
@@ -138,13 +184,8 @@ const IptvPage: React.FC = () => {
                       onClick={() => handlePlayChannel(channel)}
                       className="group bg-zinc-800 hover:bg-zinc-700 rounded-lg p-3 transition-all flex flex-col items-center justify-center text-center gap-3 border border-zinc-700 hover:border-red-600 focusable"
                     >
-                      <div className="w-16 h-16 rounded bg-zinc-900 p-2 flex items-center justify-center border border-zinc-700 group-hover:border-red-600/50">
-                        <img 
-                          src={channel.logo} 
-                          alt={channel.name} 
-                          className="max-w-full max-h-full object-contain"
-                          onError={(e) => { (e.target as HTMLImageElement).src = 'https://via.placeholder.com/150x150.png?text=TV' }}
-                        />
+                      <div className="w-16 h-16 rounded overflow-hidden p-0.5 flex items-center justify-center border border-zinc-700 group-hover:border-red-600/50">
+                        {renderChannelLogo(channel)}
                       </div>
                       <span className="text-sm font-semibold text-zinc-300 group-hover:text-white line-clamp-2">
                         {channel.name}
