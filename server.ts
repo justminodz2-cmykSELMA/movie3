@@ -5,12 +5,11 @@ import crypto from "crypto";
 import http from "http";
 import https from "https";
 import { URL } from "url";
-import { createServer as createViteServer } from "vite";
+
+const app = express();
+const PORT = 3000;
 
 async function startServer() {
-  const app = express();
-  const PORT = 3000;
-
   // Add broad CORS headers for all API requests
   app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -449,14 +448,16 @@ async function startServer() {
   });
 
   // Vite middleware for development vs static serve for production
-  if (process.env.NODE_ENV !== "production") {
+  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     console.log("Starting server in development mode (Vite Middleware)");
-    const vite = await createViteServer({
+    const viteName = "vite";
+    const viteModule = await import(viteName /* @vite-ignore */);
+    const vite = await viteModule.createServer({
       server: { middlewareMode: true },
       appType: "spa",
     });
     app.use(vite.middlewares);
-  } else {
+  } else if (!process.env.VERCEL) {
     console.log("Starting server in production mode (Static Serve)");
     const distPath = path.join(process.cwd(), "dist");
     app.use(express.static(distPath));
@@ -465,9 +466,13 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT}`);
-  });
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on port ${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+export default app;
