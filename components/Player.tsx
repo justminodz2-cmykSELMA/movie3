@@ -519,9 +519,17 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     ];
 
     useEffect(() => {
-        if (adState.isActive && adVideoRef.current) {
-            adVideoRef.current.play().catch(e => console.error("Failed to play ad:", e));
+        const adVid = adVideoRef.current;
+        if (adState.isActive && adVid) {
+            adVid.play().catch(e => console.error("Failed to play ad:", e));
         }
+        return () => {
+            if (adVid) {
+                adVid.pause();
+                adVid.removeAttribute('src');
+                adVid.load();
+            }
+        };
     }, [adState.isActive, adState.adIndex]);
 
     const [showAutoSkipAlert, setShowAutoSkipAlert] = useState(false);
@@ -780,6 +788,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
     // Effect 1: Fetch the stream URL and other data
     useEffect(() => {
+        let isMounted = true;
         if (initialStreamUrl) {
             setActiveStreamUrl(initialStreamUrl);
         }
@@ -796,14 +805,14 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 // Fetch recommendations
                 if (!liveChannels && !isLiveScheduleMode) {
                     const recsData = await fetchFromTMDB(`/${itemType}/${item.id}/recommendations`);
-                    setRecommendations(recsData.results.filter((m: Movie) => m.backdrop_path));
+                    if (isMounted) setRecommendations(recsData.results.filter((m: Movie) => m.backdrop_path));
                 }
 
 
                 // Fetch stream
                  if (!initialStreamUrl) {
                     const data = await fetchStreamUrl(item, itemType, initialSeason, initialEpisode?.episode_number, selectedProvider || undefined, serverPreferences);
-                    if (fetchIdRef.current !== fetchId) return;
+                    if (!isMounted || fetchIdRef.current !== fetchId) return;
 
                     if (data.links && data.links.length > 0) {
                         setStreamLinks(data.links);
@@ -817,7 +826,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                             fetch(firstSub.url)
                                 .then(res => res.ok ? res.text() : Promise.reject('Failed to fetch subs'))
                                 .then(srtText => analyzeSubtitlesForSkips(srtText))
-                                .then(setSkipSegments)
+                                .then(segments => { if (isMounted) setSkipSegments(segments); })
                                 .catch(e => console.error("Failed to fetch/analyze subtitles for skip markers", e));
                         }
                         onProviderSelected(data.provider);
@@ -826,11 +835,11 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     }
                 }
             } catch (error: any) {
-                if (fetchIdRef.current === fetchId) {
+                if (isMounted && fetchIdRef.current === fetchId) {
                     setToast({ message: error.message, type: 'error' });
                 }
             } finally {
-                if (fetchIdRef.current === fetchId) {
+                if (isMounted && fetchIdRef.current === fetchId) {
                     onStreamFetchStateChange(false);
                 }
             }
@@ -838,6 +847,9 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         if (!isLiveScheduleMode) {
             fetchData();
         }
+        return () => {
+            isMounted = false;
+        };
     }, [item.id, initialEpisode?.id, selectedProvider, serverPreferences.join(), isLiveScheduleMode]);
 
     // Effect 2: Play the video
@@ -987,6 +999,11 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     console.error("Error destroying mpegts player:", e);
                 }
                 mpegtsRef.current = null;
+            }
+            if (video) {
+                video.pause();
+                video.removeAttribute('src');
+                video.load();
             }
         };
     }, [activeStreamUrl, needsProxy]);
@@ -1572,6 +1589,9 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         return () => {
             clearInterval(playbackCheckInterval);
             video.removeEventListener('seeking', handleSeeking);
+            scheduledSourcesRef.current.forEach(source => { try { source.stop(); } catch(e) {} });
+            scheduledSourcesRef.current.clear();
+            scheduledSegmentIds.current.clear();
         };
     }, [activeDubbingLang]);
 
