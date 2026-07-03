@@ -700,8 +700,21 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     // Effect to handle initial and subsequent focusing when controls become visible
     useEffect(() => {
         if (isOverlayVisible && !showSettingsPanel && !showSubtitlesPanel) {
-            // Intentionally not auto-focusing elements when overlay appears
-            // to prevent unwanted spatial navigation snapping to play/fullscreen buttons.
+            const focusTimer = setTimeout(() => {
+                const playerContainer = playerContainerRef.current;
+                if (!playerContainer) return;
+
+                const activeElement = document.activeElement;
+                const isFocusOutsidePlayer = !activeElement || activeElement === document.body || !playerContainer.contains(activeElement);
+
+                if (isFocusOutsidePlayer) {
+                    const titleElement = infoPanelRef.current?.querySelector<HTMLElement>('.focusable');
+                    if (titleElement) {
+                        titleElement.focus({ preventScroll: true });
+                    }
+                }
+            }, 150);
+            return () => clearTimeout(focusTimer);
         }
     }, [isOverlayVisible, showSettingsPanel, showSubtitlesPanel]);
 
@@ -1785,14 +1798,18 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
                 {showUpNext && upNextItem && (
                     <div 
-                        className="absolute bottom-0 right-0 z-30 bg-black/90 backdrop-blur-xl border-t-2 border-l-2 border-zinc-800/50 p-6 pr-12 animate-slide-in-right shadow-2xl"
-                        style={{ borderTopLeftRadius: '32px' }}
+                        className="absolute bottom-24 right-0 z-50 flex items-stretch shadow-2xl pointer-events-none animate-slide-in-right h-12 md:h-16"
                     >
-                        <div className="flex flex-col items-start justify-center">
-                            <span className="text-white text-sm font-black uppercase tracking-[0.2em] mb-2 opacity-80">Playing Next</span>
-                            <span className="text-red-500 text-2xl md:text-3xl font-extrabold drop-shadow-md">{upNextItem.title}</span>
+                        <div className="bg-red-600 text-white px-3 flex items-center justify-center">
+                            <i className="fa-solid fa-play text-xs md:text-sm"></i>
+                        </div>
+                        <div className="bg-white text-black px-4 md:px-6 flex items-center justify-center">
+                            <span className="font-black uppercase tracking-widest text-[10px] md:text-sm whitespace-nowrap">Playing Later</span>
+                        </div>
+                        <div className="bg-black text-white px-4 md:px-8 flex flex-col justify-center min-w-[150px] max-w-[250px] md:max-w-[400px] border-l-4 border-red-500">
+                            <span className="font-extrabold text-xs md:text-base truncate text-red-500">{upNextItem.title}</span>
                             {upNextItem.subtitle && (
-                                <span className="text-zinc-300 text-sm md:text-base mt-1 font-medium">{upNextItem.subtitle}</span>
+                                <span className="text-zinc-300 text-[10px] md:text-sm truncate font-medium mt-0.5">{upNextItem.subtitle}</span>
                             )}
                         </div>
                     </div>
