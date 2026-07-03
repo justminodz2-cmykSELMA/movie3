@@ -192,18 +192,18 @@ app.use((req, res, next) => {
     return user;
   };
 
-  const createSession = (user: StoredUser): string => {
+  const createSession = async (user: StoredUser): Promise<string> => {
     const token = crypto.randomBytes(32).toString("hex");
     sessions[token] = { userId: user.id, createdAt: Date.now() };
     user.lastLoginAt = new Date().toISOString();
-    saveSessions();
-    saveUsers();
+    await saveSessions();
+    await saveUsers();
     return token;
   };
 
   const saveQr = () => writeJson("qr", qrCodes);
 
-  const cleanQrCodes = () => {
+  const cleanQrCodes = async () => {
     const now = Date.now();
     let changed = false;
     for (const code of Object.keys(qrCodes)) {
@@ -212,61 +212,67 @@ app.use((req, res, next) => {
         changed = true;
       }
     }
-    if (changed) saveQr();
+    if (changed) await saveQr();
   };
 
   // --- Sign up ---
-  app.post("/api/auth/signup", (req, res) => {
-    const { username, password } = req.body || {};
-    if (!username || !password || String(username).trim().length < 3 || String(password).length < 4) {
-      return res.status(400).json({ error: "Username must be 3+ chars and password 4+ chars" });
-    }
-    const uname = String(username).trim();
-    if (users.some((u) => u.username.toLowerCase() === uname.toLowerCase())) {
-      return res.status(409).json({ error: "Username already exists" });
-    }
-    const salt = crypto.randomBytes(16).toString("hex");
-    const user: StoredUser = {
-      id: `usr_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
-      username: uname,
-      passwordHash: hashPassword(String(password), salt),
-      salt,
-      role: "user",
-      banned: false,
-      createdAt: new Date().toISOString(),
-      lastLoginAt: null,
-    };
-    users.push(user);
-    saveUsers();
-    const token = createSession(user);
-    res.json({ token, user: publicUser(user) });
+  app.post("/api/auth/signup", async (req, res, next) => {
+    try {
+      const { username, password } = req.body || {};
+      if (!username || !password || String(username).trim().length < 3 || String(password).length < 4) {
+        return res.status(400).json({ error: "Username must be 3+ chars and password 4+ chars" });
+      }
+      const uname = String(username).trim();
+      if (users.some((u) => u.username.toLowerCase() === uname.toLowerCase())) {
+        return res.status(409).json({ error: "Username already exists" });
+      }
+      const salt = crypto.randomBytes(16).toString("hex");
+      const user: StoredUser = {
+        id: `usr_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`,
+        username: uname,
+        passwordHash: hashPassword(String(password), salt),
+        salt,
+        role: "user",
+        banned: false,
+        createdAt: new Date().toISOString(),
+        lastLoginAt: null,
+      };
+      users.push(user);
+      await saveUsers();
+      const token = await createSession(user);
+      res.json({ token, user: publicUser(user) });
+    } catch(e) { next(e); }
   });
 
   // --- Log in ---
-  app.post("/api/auth/login", (req, res) => {
-    const { username, password } = req.body || {};
-    const user = users.find(
-      (u) => u.username.toLowerCase() === String(username || "").trim().toLowerCase(),
-    );
-    if (!user || user.passwordHash !== hashPassword(String(password || ""), user.salt)) {
-      return res.status(401).json({ error: "Invalid username or password" });
-    }
-    if (user.banned) {
-      return res.status(403).json({ error: "This account has been banned" });
-    }
-    const token = createSession(user);
-    res.json({ token, user: publicUser(user) });
+  app.post("/api/auth/login", async (req, res, next) => {
+    try {
+      const { username, password } = req.body || {};
+      const user = users.find(
+        (u) => u.username.toLowerCase() === String(username || "").trim().toLowerCase(),
+      );
+      if (!user || user.passwordHash !== hashPassword(String(password || ""), user.salt)) {
+        return res.status(401).json({ error: "Invalid username or password" });
+      }
+      if (user.banned) {
+        return res.status(403).json({ error: "This account has been banned" });
+      }
+      const token = await createSession(user);
+      res.json({ token, user: publicUser(user) });
+    } catch(e) { next(e); }
   });
 
   // --- Log out ---
-  app.post("/api/auth/logout", (req, res) => {
-    const auth = req.headers.authorization || "";
-    const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-    if (token && sessions[token]) {
-      delete sessions[token];
-      saveSessions();
-    }
-    res.json({ ok: true });
+  app.post("/api/auth/logout", async (req, res, next) => {
+    try {
+      const auth = req.headers.authorization || "";
+      const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+      if (token && sessions[token]) {
+        delete sessions[token];
+        await saveSessions();
+      }
+      res.json({ ok: true });
+    } catch(e) { next(e); }
   });
 
   // --- Current user ---
@@ -277,48 +283,54 @@ app.use((req, res, next) => {
   });
 
   // --- QR login: TV creates a pairing code ---
-  app.post("/api/auth/qr/create", (req, res) => {
-    cleanQrCodes();
-    const code = crypto.randomBytes(3).toString("hex").toUpperCase();
-    qrCodes[code] = { status: "pending", createdAt: Date.now() };
-    saveQr();
-    res.json({ code, expiresInSeconds: QR_TTL_MS / 1000 });
+  app.post("/api/auth/qr/create", async (req, res, next) => {
+    try {
+      await cleanQrCodes();
+      const code = crypto.randomBytes(3).toString("hex").toUpperCase();
+      qrCodes[code] = { status: "pending", createdAt: Date.now() };
+      await saveQr();
+      res.json({ code, expiresInSeconds: QR_TTL_MS / 1000 });
+    } catch(e) { next(e); }
   });
 
   // --- QR login: TV polls pairing status ---
-  app.get("/api/auth/qr/status", (req, res) => {
-    cleanQrCodes();
-    const code = String(req.query.code || "").toUpperCase();
-    const entry = qrCodes[code];
-    if (!entry) return res.json({ status: "expired" });
-    if (entry.status === "approved" && entry.token) {
-      const session = sessions[entry.token];
-      const user = session ? users.find((u) => u.id === session.userId) : null;
-      delete qrCodes[code];
-      saveQr();
-      return res.json({
-        status: "approved",
-        token: entry.token,
-        user: user ? publicUser(user) : null,
-      });
-    }
-    res.json({ status: "pending" });
+  app.get("/api/auth/qr/status", async (req, res, next) => {
+    try {
+      await cleanQrCodes();
+      const code = String(req.query.code || "").toUpperCase();
+      const entry = qrCodes[code];
+      if (!entry) return res.json({ status: "expired" });
+      if (entry.status === "approved" && entry.token) {
+        const session = sessions[entry.token];
+        const user = session ? users.find((u) => u.id === session.userId) : null;
+        delete qrCodes[code];
+        await saveQr();
+        return res.json({
+          status: "approved",
+          token: entry.token,
+          user: user ? publicUser(user) : null,
+        });
+      }
+      res.json({ status: "pending" });
+    } catch(e) { next(e); }
   });
 
   // --- QR login: phone (logged in) approves the TV code ---
-  app.post("/api/auth/qr/approve", (req, res) => {
-    cleanQrCodes();
-    const user = getUserByToken(req);
-    if (!user) return res.status(401).json({ error: "Log in first to approve the TV" });
-    const code = String((req.body || {}).code || "").toUpperCase();
-    const entry = qrCodes[code];
-    if (!entry || entry.status !== "pending") {
-      return res.status(404).json({ error: "Code expired or invalid. Refresh the QR on your TV." });
-    }
-    entry.token = createSession(user);
-    entry.status = "approved";
-    saveQr();
-    res.json({ ok: true });
+  app.post("/api/auth/qr/approve", async (req, res, next) => {
+    try {
+      await cleanQrCodes();
+      const user = getUserByToken(req);
+      if (!user) return res.status(401).json({ error: "Log in first to approve the TV" });
+      const code = String((req.body || {}).code || "").toUpperCase();
+      const entry = qrCodes[code];
+      if (!entry || entry.status !== "pending") {
+        return res.status(404).json({ error: "Code expired or invalid. Refresh the QR on your TV." });
+      }
+      entry.token = await createSession(user);
+      entry.status = "approved";
+      await saveQr();
+      res.json({ ok: true });
+    } catch(e) { next(e); }
   });
 
   // --- Admin: middleware ---
@@ -348,48 +360,54 @@ app.use((req, res, next) => {
   });
 
   // --- Admin: ban / unban ---
-  app.post("/api/admin/users/:id/toggle-ban", requireAdmin, (req, res) => {
-    const admin = (req as any).adminUser as StoredUser;
-    const target = users.find((u) => u.id === req.params.id);
-    if (!target) return res.status(404).json({ error: "User not found" });
-    if (target.id === admin.id) return res.status(400).json({ error: "You cannot ban yourself" });
-    target.banned = !target.banned;
-    if (target.banned) {
-      for (const [tok, s] of Object.entries(sessions)) {
-        if (s.userId === target.id) delete sessions[tok];
+  app.post("/api/admin/users/:id/toggle-ban", requireAdmin, async (req, res, next) => {
+    try {
+      const admin = (req as any).adminUser as StoredUser;
+      const target = users.find((u) => u.id === req.params.id);
+      if (!target) return res.status(404).json({ error: "User not found" });
+      if (target.id === admin.id) return res.status(400).json({ error: "You cannot ban yourself" });
+      target.banned = !target.banned;
+      if (target.banned) {
+        for (const [tok, s] of Object.entries(sessions)) {
+          if (s.userId === target.id) delete sessions[tok];
+        }
+        await saveSessions();
       }
-      saveSessions();
-    }
-    saveUsers();
-    res.json({ user: publicUser(target) });
+      await saveUsers();
+      res.json({ user: publicUser(target) });
+    } catch(e) { next(e); }
   });
 
   // --- Admin: change role ---
-  app.post("/api/admin/users/:id/role", requireAdmin, (req, res) => {
-    const admin = (req as any).adminUser as StoredUser;
-    const target = users.find((u) => u.id === req.params.id);
-    if (!target) return res.status(404).json({ error: "User not found" });
-    if (target.id === admin.id) return res.status(400).json({ error: "You cannot change your own role" });
-    const role = (req.body || {}).role;
-    if (role !== "admin" && role !== "user") return res.status(400).json({ error: "Invalid role" });
-    target.role = role;
-    saveUsers();
-    res.json({ user: publicUser(target) });
+  app.post("/api/admin/users/:id/role", requireAdmin, async (req, res, next) => {
+    try {
+      const admin = (req as any).adminUser as StoredUser;
+      const target = users.find((u) => u.id === req.params.id);
+      if (!target) return res.status(404).json({ error: "User not found" });
+      if (target.id === admin.id) return res.status(400).json({ error: "You cannot change your own role" });
+      const role = (req.body || {}).role;
+      if (role !== "admin" && role !== "user") return res.status(400).json({ error: "Invalid role" });
+      target.role = role;
+      await saveUsers();
+      res.json({ user: publicUser(target) });
+    } catch(e) { next(e); }
   });
 
   // --- Admin: delete user ---
-  app.delete("/api/admin/users/:id", requireAdmin, (req, res) => {
-    const admin = (req as any).adminUser as StoredUser;
-    if (req.params.id === admin.id) return res.status(400).json({ error: "You cannot delete yourself" });
-    const before = users.length;
-    users = users.filter((u) => u.id !== req.params.id);
-    if (users.length === before) return res.status(404).json({ error: "User not found" });
-    for (const [tok, s] of Object.entries(sessions)) {
-      if (s.userId === req.params.id) delete sessions[tok];
-    }
-    saveSessions();
-    saveUsers();
-    res.json({ ok: true });
+  app.delete("/api/admin/users/:id", requireAdmin, async (req, res, next) => {
+    try {
+      const admin = (req as any).adminUser as StoredUser;
+      if (req.params.id === admin.id) return res.status(400).json({ error: "You cannot delete yourself" });
+      const before = users.length;
+      users = users.filter((u) => u.id !== req.params.id);
+      if (users.length === before) return res.status(404).json({ error: "User not found" });
+      for (const [tok, s] of Object.entries(sessions)) {
+        if (s.userId === req.params.id) delete sessions[tok];
+      }
+      await saveSessions();
+      await saveUsers();
+      res.json({ ok: true });
+    } catch(e) { next(e); }
   });
 
   // API 2: M3U Playlist Proxy
