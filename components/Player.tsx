@@ -333,9 +333,9 @@ const SettingsPanel: React.FC<{
 
     const renderMain = () => (
         <div className="flex flex-col gap-2">
-            <button ref={el => {mainPanelButtonsRef.current['dubbing'] = el}} onClick={() => setView('dubbing')} className="player-panel-button justify-between">
+            <button ref={el => {mainPanelButtonsRef.current['dubbing'] = el}} disabled className="player-panel-button justify-between opacity-50 cursor-not-allowed">
                 <span>{t('dubbing')}</span>
-                <span className="text-zinc-400">{activeDubbingLang === 'ar-ai' ? t('arabicAi') : t('originalAudio')} <i className="fa-solid fa-chevron-right text-xs"></i></span>
+                <span className="text-zinc-500 text-xs uppercase tracking-wider font-bold">Coming Soon</span>
             </button>
             <button onClick={() => onToggleEnhancement()} className="player-panel-button justify-between">
                 <span>Video Enhancement (AI)</span>
