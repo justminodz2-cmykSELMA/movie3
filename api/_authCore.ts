@@ -87,7 +87,8 @@ const publicUser = (u: StoredUser) => ({
 
 // Loads users and seeds the owner admin account, same as server.ts
 const loadUsers = async (): Promise<StoredUser[]> => {
-  const users = await loadJson<StoredUser[]>("auth-users", []);
+  let users = await loadJson<StoredUser[]>("auth-users", []);
+  if (!Array.isArray(users)) users = [];
   let changed = false;
   const owner = users.find((u) => u.username === "adminown1");
   if (owner && owner.role !== "admin") {
@@ -112,10 +113,15 @@ const loadUsers = async (): Promise<StoredUser[]> => {
   return users;
 };
 
-const loadSessions = () => loadJson<Sessions>("auth-sessions", {});
+const loadSessions = async () => {
+  let sessions = await loadJson<Sessions>("auth-sessions", {});
+  if (!sessions || typeof sessions !== "object" || Array.isArray(sessions)) sessions = {};
+  return sessions;
+};
 
 const loadQr = async (): Promise<QrCodes> => {
-  const all = await loadJson<QrCodes>("auth-qr", {});
+  let all = await loadJson<QrCodes>("auth-qr", {});
+  if (!all || typeof all !== "object" || Array.isArray(all)) all = {};
   const now = Date.now();
   const cleaned: QrCodes = {};
   for (const [code, entry] of Object.entries(all)) {
@@ -164,7 +170,15 @@ const readBody = (req: any): any => (req.body && typeof req.body === "object" ? 
 const routeSegments = (req: any): string[] => {
   const p = req.query?.path;
   if (Array.isArray(p)) return p;
-  if (typeof p === "string" && p) return [p];
+  if (typeof p === "string" && p) return p.split("/");
+
+  if (req.url) {
+    const pathname = req.url.split("?")[0];
+    const match = pathname.match(/^\/api\/[^\/]+\/(.*)$/);
+    if (match) return match[1].split("/").filter(Boolean);
+    return pathname.split("/").filter(Boolean);
+  }
+
   return [];
 };
 
