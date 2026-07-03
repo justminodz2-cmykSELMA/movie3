@@ -600,6 +600,37 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const [skipSegments, setSkipSegments] = useState<{ intro: SkipSegment | null; outro: SkipSegment | null }>({ intro: null, outro: null });
     const [activeSkip, setActiveSkip] = useState<'intro' | 'outro' | null>(null);
 
+    const [upNextItem, setUpNextItem] = useState<{ title: string, subtitle: string, type: 'tv' | 'movie', data: any } | null>(null);
+    const [showUpNext, setShowUpNext] = useState(false);
+    const upNextTriggeredRef = useRef(false);
+    const upNextAutoPlayTriggeredRef = useRef(false);
+    const upNextItemRef = useRef(upNextItem);
+    const showUpNextRef = useRef(showUpNext);
+
+    useEffect(() => { upNextItemRef.current = upNextItem; }, [upNextItem]);
+    useEffect(() => { showUpNextRef.current = showUpNext; }, [showUpNext]);
+
+    const recommendationsRef = useRef(recommendations);
+    useEffect(() => { recommendationsRef.current = recommendations; }, [recommendations]);
+
+    const episodesRef = useRef(episodes);
+    useEffect(() => { episodesRef.current = episodes; }, [episodes]);
+    
+    const initialEpisodeRef = useRef(initialEpisode);
+    useEffect(() => { initialEpisodeRef.current = initialEpisode; }, [initialEpisode]);
+
+    const handlePlayNext = useCallback((nextItem: any) => {
+        if (nextItem.type === 'tv') {
+            onEpisodeSelect(nextItem.data);
+        } else {
+            navigate('/player', { state: { item: nextItem.data, type: 'movie' }, replace: true });
+        }
+        setShowUpNext(false);
+        upNextTriggeredRef.current = false;
+        upNextAutoPlayTriggeredRef.current = false;
+        setUpNextItem(null);
+    }, [onEpisodeSelect, navigate]);
+
     const [activeDubbingLang, setActiveDubbingLang] = useState<string | null>(null);
     const [isDubbingLoading, setIsDubbingLoading] = useState(false);
     const [dubbingProgress, setDubbingProgress] = useState('');
@@ -669,19 +700,8 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     // Effect to handle initial and subsequent focusing when controls become visible
     useEffect(() => {
         if (isOverlayVisible && !showSettingsPanel && !showSubtitlesPanel) {
-            const focusTimer = setTimeout(() => {
-                const playerContainer = playerContainerRef.current;
-                if (!playerContainer) return;
-
-                const activeElement = document.activeElement;
-                const isFocusOutsidePlayer = !activeElement || activeElement === document.body || !playerContainer.contains(activeElement);
-
-                if (isFocusOutsidePlayer) {
-                    const titleElement = infoPanelRef.current?.querySelector<HTMLElement>('.focusable');
-                    titleElement?.focus();
-                }
-            }, 150);
-            return () => clearTimeout(focusTimer);
+            // Intentionally not auto-focusing elements when overlay appears
+            // to prevent unwanted spatial navigation snapping to play/fullscreen buttons.
         }
     }, [isOverlayVisible, showSettingsPanel, showSubtitlesPanel]);
 
@@ -906,13 +926,12 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 isLive: true,
                 url: activeStreamUrl,
             }, {
-                enableWorker: true,
+                enableWorker: false,
                 lazyLoad: false,
                 liveBufferLatencyChasing: true,
-                liveBufferLatencyMaxLatency: 15,
-                liveBufferLatencyMinRemain: 4,
-                enableStashBuffer: true,
-                stashInitialSize: 384 * 1024,
+                liveBufferLatencyMaxLatency: 3,
+                liveBufferLatencyMinRemain: 1,
+                enableStashBuffer: false
             });
             mpegtsRef.current = player;
             
@@ -1074,6 +1093,45 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     seg => video.currentTime >= seg.start && video.currentTime < seg.end
                 );
                 video.volume = isDubPlaying ? 0 : 1.0;
+            }
+
+            if (!liveChannels && !isLiveScheduleMode && video.duration > 0) {
+                const remaining = video.duration - video.currentTime;
+                
+                if (remaining <= 30 && remaining > 0 && !upNextTriggeredRef.current) {
+                    upNextTriggeredRef.current = true;
+                    let nextData = null;
+                    if (itemType === 'tv' && initialEpisodeRef.current && episodesRef.current.length > 0) {
+                        const currentIndex = episodesRef.current.findIndex(e => e.id === initialEpisodeRef.current?.id);
+                        if (currentIndex !== -1 && currentIndex < episodesRef.current.length - 1) {
+                            const nextEp = episodesRef.current[currentIndex + 1];
+                            nextData = {
+                                title: nextEp.name,
+                                subtitle: `${t('season')} ${initialSeason} ${t('episodeCountLabel')} ${nextEp.episode_number}`,
+                                type: 'tv',
+                                data: nextEp
+                            };
+                        }
+                    } else if (itemType === 'movie' && recommendationsRef.current.length > 0) {
+                        const randRec = recommendationsRef.current[Math.floor(Math.random() * recommendationsRef.current.length)];
+                        nextData = {
+                            title: randRec.title || randRec.name || 'Next Movie',
+                            subtitle: randRec.release_date ? randRec.release_date.substring(0, 4) : '',
+                            type: 'movie',
+                            data: randRec
+                        };
+                    }
+                    
+                    if (nextData) {
+                        setUpNextItem(nextData as any);
+                        setShowUpNext(true);
+                    }
+                }
+
+                if (remaining <= 5 && remaining > 0 && showUpNextRef.current && upNextItemRef.current && !upNextAutoPlayTriggeredRef.current) {
+                    upNextAutoPlayTriggeredRef.current = true;
+                    handlePlayNext(upNextItemRef.current);
+                }
             }
         };
         const onDurationChange = () => {
@@ -1723,6 +1781,21 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     >
                         {activeSkip === 'intro' ? 'Skip Intro' : 'Skip Outro'}
                     </button>
+                )}
+
+                {showUpNext && upNextItem && (
+                    <div 
+                        className="absolute bottom-0 right-0 z-30 bg-black/90 backdrop-blur-xl border-t-2 border-l-2 border-zinc-800/50 p-6 pr-12 animate-slide-in-right shadow-2xl"
+                        style={{ borderTopLeftRadius: '32px' }}
+                    >
+                        <div className="flex flex-col items-start justify-center">
+                            <span className="text-white text-sm font-black uppercase tracking-[0.2em] mb-2 opacity-80">Playing Next</span>
+                            <span className="text-red-500 text-2xl md:text-3xl font-extrabold drop-shadow-md">{upNextItem.title}</span>
+                            {upNextItem.subtitle && (
+                                <span className="text-zinc-300 text-sm md:text-base mt-1 font-medium">{upNextItem.subtitle}</span>
+                            )}
+                        </div>
+                    </div>
                 )}
 
                 <Controls
