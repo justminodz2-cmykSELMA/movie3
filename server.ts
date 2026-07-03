@@ -5,13 +5,13 @@ import crypto from "crypto";
 import http from "http";
 import https from "https";
 import { URL } from "url";
+import { Redis } from "@upstash/redis";
 
 const app = express();
 const PORT = 3000;
 
-async function startServer() {
-  // Add broad CORS headers for all API requests
-  app.use((req, res, next) => {
+// Add broad CORS headers for all API requests
+app.use((req, res, next) => {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "*");
@@ -35,6 +35,13 @@ async function startServer() {
   const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
   const hasRedis = Boolean(REDIS_URL && REDIS_TOKEN);
 
+  const redis = hasRedis
+    ? new Redis({
+        url: REDIS_URL,
+        token: REDIS_TOKEN,
+      })
+    : null;
+
   const TMP_DIR = "/tmp/vetrix-auth";
   const DATA_DIR = process.env.VERCEL ? TMP_DIR : path.join(process.cwd(), "data");
 
@@ -50,19 +57,14 @@ async function startServer() {
   }
 
   const redisGet = async (key: string): Promise<string | null> => {
-    const r = await fetch(`${REDIS_URL}/get/${encodeURIComponent(key)}`, {
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-    });
-    const j: any = await r.json().catch(() => null);
-    return j && j.result != null ? String(j.result) : null;
+    if (!redis) return null;
+    const data = await redis.get(key);
+    return data ? JSON.stringify(data) : null;
   };
 
   const redisSet = async (key: string, value: string) => {
-    await fetch(`${REDIS_URL}/set/${encodeURIComponent(key)}`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
-      body: value,
-    });
+    if (!redis) return;
+    await redis.set(key, value);
   };
 
   const readJson = async <T>(key: string, fallback: T): Promise<T> => {
@@ -95,8 +97,12 @@ async function startServer() {
     }
   };
 
+  type QrEntry = { status: "pending" | "approved"; token?: string; createdAt: number };
+  let qrCodes: Record<string, QrEntry> = {};
+
   let users: StoredUser[] = [];
   let sessions: Record<string, { userId: string; createdAt: number }> = {};
+
   
   // Async initialization
   const initDb = async () => {
@@ -142,16 +148,23 @@ async function startServer() {
   const saveSessions = () => writeJson("sessions", sessions);
 
   let dbInitialized = false;
+  let dbInitPromise: Promise<void> | null = null;
   app.use(async (req, res, next) => {
     if (!dbInitialized) {
-      await initDb();
-      dbInitialized = true;
+      if (!dbInitPromise) {
+        dbInitPromise = initDb().then(() => {
+          dbInitialized = true;
+        });
+      }
+      try {
+        await dbInitPromise;
+      } catch (err) {
+        console.error("DB Init Error:", err);
+        return next(err);
+      }
     }
     next();
   });
-
-  type QrEntry = { status: "pending" | "approved"; token?: string; createdAt: number };
-  let qrCodes: Record<string, QrEntry> = {};
 
   const QR_TTL_MS = 5 * 60 * 1000;
 
@@ -507,12 +520,13 @@ async function startServer() {
   });
 
   // Vite middleware for development vs static serve for production
-  if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
+  async function startServer() {
+    if (process.env.NODE_ENV !== "production" && !process.env.VERCEL) {
     console.log("Starting server in development mode (Vite Middleware)");
     const viteName = "vite";
     const viteModule = await import(viteName /* @vite-ignore */);
     const vite = await viteModule.createServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, hmr: false },
       appType: "spa",
     });
     app.use(vite.middlewares);
@@ -530,13 +544,13 @@ async function startServer() {
       console.log(`Server running on port ${PORT}`);
     });
   }
+}
 
   // Global error handler
   app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
     console.error("[Express Error]", err);
     res.status(500).json({ error: "Internal Server Error", details: err.message });
   });
-}
 
 startServer().catch(err => {
   console.error("Server start failed:", err);
