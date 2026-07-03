@@ -16,6 +16,10 @@ import YouPage from './pages/YouPage';
 import AISearchPage from './pages/AISearchPage';
 import IframePlayerPage from './pages/IframePlayerPage';
 import IptvPage from './pages/IptvPage';
+import LoginPage from './pages/LoginPage';
+import QrApprovePage from './pages/QrApprovePage';
+import AdminPage from './pages/AdminPage';
+import { RequireAuth, GuestWatchGate } from './components/AuthGuard';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { PlayerProvider } from './contexts/PlayerContext';
@@ -208,24 +212,27 @@ const App: React.FC = () => {
           <HashRouter>
             <PlayerProvider>
               <Routes>
-                <Route path="/" element={<ProfilePage />} />
-                <Route path="/home" element={<HomePage />} />
-                <Route path="/movies" element={<MoviesPage />} />
-                <Route path="/tv" element={<TvShowsPage />} />
-                <Route path="/actor/:id" element={<ActorDetailsPage />} />
-                <Route path="/player" element={<PlayerPage />} />
-                <Route path="/iframe-player" element={<IframePlayerPage />} />
-                <Route path="/favorites" element={<GenericPageWrapper pageType="favorites" />} />
-                <Route path="/search" element={<GenericPageWrapper pageType="search" />} />
-                <Route path="/all/:category" element={<GenericPageWrapper pageType="all" />} />
-                <Route path="/iptv" element={<IptvPage />} />
-                <Route path="/settings" element={<SettingsPage />} />
-                <Route path="/details/:type/:id" element={<DetailsPage />} />
-                <Route path="/cinema" element={<CinemaPage />} />
-                <Route path="/live/:type/:id" element={<LiveRoomPage />} />
-                <Route path="/shorts" element={<ShortsPage />} />
-                <Route path="/you" element={<YouPage />} />
-                <Route path="/ai-search" element={<AISearchPage />} />
+                <Route path="/" element={<RequireAuth><ProfilePage /></RequireAuth>} />
+                <Route path="/home" element={<RequireAuth><HomePage /></RequireAuth>} />
+                <Route path="/movies" element={<RequireAuth><MoviesPage /></RequireAuth>} />
+                <Route path="/tv" element={<RequireAuth><TvShowsPage /></RequireAuth>} />
+                <Route path="/actor/:id" element={<RequireAuth><ActorDetailsPage /></RequireAuth>} />
+                <Route path="/player" element={<RequireAuth><GuestWatchGate><PlayerPage /></GuestWatchGate></RequireAuth>} />
+                <Route path="/iframe-player" element={<RequireAuth><GuestWatchGate><IframePlayerPage /></GuestWatchGate></RequireAuth>} />
+                <Route path="/favorites" element={<RequireAuth><GenericPageWrapper pageType="favorites" /></RequireAuth>} />
+                <Route path="/search" element={<RequireAuth><GenericPageWrapper pageType="search" /></RequireAuth>} />
+                <Route path="/all/:category" element={<RequireAuth><GenericPageWrapper pageType="all" /></RequireAuth>} />
+                <Route path="/iptv" element={<RequireAuth><IptvPage /></RequireAuth>} />
+                <Route path="/settings" element={<RequireAuth><SettingsPage /></RequireAuth>} />
+                <Route path="/details/:type/:id" element={<RequireAuth><DetailsPage /></RequireAuth>} />
+                <Route path="/cinema" element={<RequireAuth><CinemaPage /></RequireAuth>} />
+                <Route path="/live/:type/:id" element={<RequireAuth><LiveRoomPage /></RequireAuth>} />
+                <Route path="/shorts" element={<RequireAuth><ShortsPage /></RequireAuth>} />
+                <Route path="/you" element={<RequireAuth><YouPage /></RequireAuth>} />
+                <Route path="/ai-search" element={<RequireAuth><AISearchPage /></RequireAuth>} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/qr-approve" element={<QrApprovePage />} />
+                <Route path="/admin" element={<RequireAuth><AdminPage /></RequireAuth>} />
               </Routes>
               <PipPlayer />
               <GlobalModal />
