@@ -59,7 +59,8 @@ app.use((req, res, next) => {
   const redisGet = async (key: string): Promise<string | null> => {
     if (!redis) return null;
     const data = await redis.get(key);
-    return data ? JSON.stringify(data) : null;
+    if (data === null || data === undefined) return null;
+    return typeof data === "string" ? data : JSON.stringify(data);
   };
 
   const redisSet = async (key: string, value: string) => {
