@@ -57,7 +57,7 @@ const scheduleSchema = {
 const PlayerPage: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { item: initialItem, type, season: initialSeason, episode: initialEpisode, currentTime, streamUrl, liveChannels, currentChannelIndex, logo, needsProxy, hideLogo } = location.state || {};
+    const { item: initialItem, type, season: initialSeason, episode: initialEpisode, currentTime: initialCurrentTime, streamUrl, liveChannels, currentChannelIndex, logo, needsProxy, hideLogo } = location.state || {};
     const { setToast, updateHistory, getScreenSpecificData, isKidsMode } = useProfile();
     const { t } = useTranslation();
     const { setPipData, setPipAnchor } = usePlayer();
@@ -65,8 +65,16 @@ const PlayerPage: React.FC = () => {
     const [item, setItem] = useState<Movie | null>(initialItem);
     const [currentSeason, setCurrentSeason] = useState<number | undefined>(initialSeason);
     const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(initialEpisode);
+    const [currentTime, setCurrentTime] = useState<number>(initialCurrentTime || 0);
     const [episodes, setEpisodes] = useState<Episode[]>([]);
     const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        setItem(initialItem);
+        setCurrentSeason(initialSeason);
+        setCurrentEpisode(initialEpisode);
+        setCurrentTime(initialCurrentTime || 0);
+    }, [initialItem?.id, initialSeason, initialEpisode?.id, initialCurrentTime]);
     
     const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
     const [isFetchingStream, setIsFetchingStream] = useState(true);
@@ -315,6 +323,7 @@ const PlayerPage: React.FC = () => {
 
     const handleEpisodeSelect = (episode: Episode) => {
         setCurrentEpisode(episode);
+        setCurrentTime(0);
     };
     
     const handleEnterPip = (url: string, time: number, playing: boolean, dimensions: DOMRect) => {
