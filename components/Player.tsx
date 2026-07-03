@@ -1817,20 +1817,47 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 )}
 
                 {showUpNext && upNextItem && (
-                    <div 
-                        className="absolute bottom-24 right-0 z-50 flex items-stretch shadow-2xl pointer-events-none animate-slide-in-right h-12 md:h-16"
-                    >
-                        <div className="bg-red-600 text-white px-3 flex items-center justify-center">
-                            <i className="fa-solid fa-play text-xs md:text-sm"></i>
-                        </div>
-                        <div className="bg-white text-black px-4 md:px-6 flex items-center justify-center">
-                            <span className="font-black uppercase tracking-widest text-[10px] md:text-sm whitespace-nowrap">Playing Later</span>
-                        </div>
-                        <div className="bg-black text-white px-4 md:px-8 flex flex-col justify-center min-w-[150px] max-w-[250px] md:max-w-[400px] border-l-4 border-red-500">
-                            <span className="font-extrabold text-xs md:text-base truncate text-red-500">{upNextItem.title}</span>
-                            {upNextItem.subtitle && (
-                                <span className="text-zinc-300 text-[10px] md:text-sm truncate font-medium mt-0.5">{upNextItem.subtitle}</span>
+                    <div className="absolute bottom-24 right-0 z-50 pointer-events-none animate-slide-in-right">
+                        <div className="flex items-stretch overflow-hidden rounded-l-2xl bg-black/75 backdrop-blur-xl border border-white/10 border-r-0 shadow-[0_25px_60px_-15px_rgba(0,0,0,0.9)]">
+                            {(upNextItem.data?.still_path || upNextItem.data?.backdrop_path) && (
+                                <div className="relative w-28 md:w-44 flex-shrink-0">
+                                    <img
+                                        src={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${upNextItem.data?.still_path || upNextItem.data?.backdrop_path}`}
+                                        alt={upNextItem.title}
+                                        className="absolute inset-0 w-full h-full object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-transparent to-black/80"></div>
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-black/50 border border-white/40 backdrop-blur-sm flex items-center justify-center">
+                                            <i className="fa-solid fa-play text-white text-[10px] md:text-xs ml-0.5"></i>
+                                        </div>
+                                    </div>
+                                </div>
                             )}
+                            <div className="flex flex-col justify-center gap-0.5 md:gap-1 px-4 md:px-6 py-3 md:py-4 min-w-[170px] max-w-[260px] md:max-w-[380px]">
+                                <div className="flex items-center gap-2">
+                                    <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse"></span>
+                                    <span className="text-[9px] md:text-[11px] font-black uppercase tracking-[0.25em] text-zinc-300">Playing Next</span>
+                                </div>
+                                <span className="font-extrabold text-sm md:text-lg text-white truncate leading-tight">{upNextItem.title}</span>
+                                {upNextItem.subtitle && (
+                                    <span className="text-zinc-400 text-[10px] md:text-xs truncate font-medium">{upNextItem.subtitle}</span>
+                                )}
+                                {duration > 0 && (
+                                    <div className="mt-1.5 md:mt-2 flex items-center gap-2">
+                                        <div className="flex-1 h-1 rounded-full bg-white/15 overflow-hidden">
+                                            <div
+                                                className="h-full bg-gradient-to-r from-red-500 to-red-700 rounded-full transition-[width] duration-500 ease-linear"
+                                                style={{ width: `${Math.min(100, Math.max(0, ((30 - Math.max(0, duration - currentTime)) / 30) * 100))}%` }}
+                                            />
+                                        </div>
+                                        <span className="text-[9px] md:text-[11px] font-bold text-zinc-300 tabular-nums w-7 text-right">
+                                            {Math.max(0, Math.ceil(duration - currentTime))}s
+                                        </span>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="w-1.5 bg-gradient-to-b from-red-500 to-red-800 flex-shrink-0"></div>
                         </div>
                     </div>
                 )}
