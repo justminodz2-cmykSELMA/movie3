@@ -4,6 +4,8 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
 import { Profile } from '../types';
 import { motion } from 'motion/react';
+import { getToken, logout } from '../services/authService';
+import { disableGuestMode } from '../components/AuthGuard';
 
 const PROFILE_AVATARS = [
     // Netflix Classics (Hosted on Imgur)
@@ -192,6 +194,7 @@ const ProfilePage: React.FC = () => {
     const [showAvatarPicker, setShowAvatarPicker] = useState(false);
 
     const [activeWormId, setActiveWormId] = useState<string | null>(null);
+    const isLoggedIn = !!getToken();
 
     // Auto-focus the first focusable element when view, isManaging, or showAvatarPicker changes to keep D-pad focus active
     useEffect(() => {
@@ -320,6 +323,13 @@ const ProfilePage: React.FC = () => {
         }
     };
     
+    const handleLogout = async () => {
+        await logout();
+        disableGuestMode();
+        setToast({ message: 'Logged out', type: 'info' });
+        navigate('/login', { replace: true });
+    };
+
     if (!accountData) {
         return <div className="flex items-center justify-center h-screen bg-transparent text-white text-xl">{t('loadingProfiles')}</div>;
     }
@@ -564,12 +574,32 @@ const ProfilePage: React.FC = () => {
                     />
                 )}
             </div>
-            <button
-                onClick={() => setIsManaging(!isManaging)}
-                className="mt-16 px-8 py-2.5 text-lg font-normal bg-transparent text-gray-400 border border-gray-600 uppercase tracking-widest hover:border-white hover:text-white transition-colors focusable"
-            >
-                {isManaging ? t('done') : t('manageProfiles')}
-            </button>
+            {isLoggedIn ? (
+                <div className="mt-16 flex flex-wrap items-center justify-center gap-4">
+                    <button
+                        onClick={() => setIsManaging(!isManaging)}
+                        tabIndex={0}
+                        className="px-8 py-2.5 text-lg font-normal bg-transparent text-gray-400 border border-gray-600 uppercase tracking-widest hover:border-white hover:text-white transition-colors focusable"
+                    >
+                        {isManaging ? t('done') : t('manageProfiles')}
+                    </button>
+                    <button
+                        onClick={handleLogout}
+                        tabIndex={0}
+                        className="px-8 py-2.5 text-lg font-normal bg-transparent text-gray-400 border border-gray-600 uppercase tracking-widest hover:border-red-600 hover:text-red-500 transition-colors focusable"
+                    >
+                        <i className="fa-solid fa-right-from-bracket mr-2"></i>Log Out
+                    </button>
+                </div>
+            ) : (
+                <button
+                    onClick={() => navigate('/login')}
+                    tabIndex={0}
+                    className="mt-16 px-8 py-2.5 text-lg font-normal bg-transparent text-gray-400 border border-gray-600 uppercase tracking-widest hover:border-white hover:text-white transition-colors focusable"
+                >
+                    <i className="fa-solid fa-right-to-bracket mr-2"></i>Log In
+                </button>
+            )}
         </div>
     );
 };
