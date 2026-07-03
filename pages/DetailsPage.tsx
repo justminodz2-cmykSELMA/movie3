@@ -71,7 +71,7 @@ const DetailsPage: React.FC = () => {
     if (!loading && item) {
       const timer = setTimeout(() => {
         playButtonRef.current?.focus({ preventScroll: true });
-      }, 800);
+      }, 50);
       return () => clearTimeout(timer);
     }
   }, [loading, item]);
