@@ -153,10 +153,11 @@ const LoginPage: React.FC = () => {
   if (currentUser) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-black to-zinc-950 flex flex-col items-center justify-center px-6 text-white">
-        <div className="flex items-center gap-2 mb-10">
-          <span className="text-3xl font-black text-red-600" style={{ fontFamily: "'Anton', sans-serif" }}>N</span>
-          <span className="text-lg font-semibold tracking-[0.25em] text-zinc-200 uppercase">CineStream</span>
-        </div>
+        <img
+        src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png"
+        alt="Vetrix"
+        className="w-28 h-28 object-contain mb-10"
+      />
         <div className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-10 max-w-md w-full text-center shadow-2xl backdrop-blur-md">
           <div className="w-20 h-20 mx-auto rounded-full bg-red-600/15 border border-red-600/40 flex items-center justify-center mb-5">
             <i className="fa-solid fa-user text-3xl text-red-500"></i>
@@ -195,10 +196,11 @@ const LoginPage: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-zinc-950 via-black to-zinc-950 text-white flex flex-col items-center justify-center px-6 py-10">
-      <div className="flex items-center gap-2 mb-10">
-        <span className="text-3xl font-black text-red-600" style={{ fontFamily: "'Anton', sans-serif" }}>N</span>
-        <span className="text-lg font-semibold tracking-[0.25em] text-zinc-200 uppercase">CineStream</span>
-      </div>
+      <img
+        src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png"
+        alt="Vetrix"
+        className="w-28 h-28 object-contain mb-10"
+      />
 
       <div className="flex flex-col lg:flex-row items-stretch gap-8 w-full max-w-5xl">
         {/* QR panel */}
@@ -243,7 +245,7 @@ const LoginPage: React.FC = () => {
         <div className="flex-1 bg-zinc-900/70 border border-zinc-800 rounded-2xl p-8 shadow-2xl backdrop-blur-md">
           <h2 className="text-xl font-bold mb-1">{mode === "login" ? "Log in with password" : "Create an account"}</h2>
           <p className="text-sm text-zinc-400 mb-6">
-            {mode === "login" ? "Use your CineStream account credentials." : "Sign up right here on your TV."}
+            {mode === "login" ? "Use your Vetrix account credentials." : "Sign up right here on your TV."}
           </p>
 
           <form onSubmit={handleSubmit} className="space-y-4">
