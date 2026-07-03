@@ -1,0 +1,42 @@
+[
+  {
+    "id": "usr_1783082196748_29f18cdf",
+    "username": "Owner",
+    "passwordHash": "dadeee55f64e1531874a9800695acd93c56cad82210c8c4e2c8f02ae8b4c7b3ae1d9dc301dd8c22f25f781d8fd9991bc03598cb5f2fdde8b1053a5f930d8f009",
+    "salt": "61466883f63a09fa259baa9e723878bd",
+    "role": "user",
+    "banned": false,
+    "createdAt": "2026-07-03T12:36:36.782Z",
+    "lastLoginAt": "2026-07-03T12:36:36.783Z"
+  },
+  {
+    "id": "usr_1783082247370_75e48c2e",
+    "username": "acme",
+    "passwordHash": "7d186a4d5bdf5b594d6ff335244cc953ca517ad9f31864563f13a1a0d5b139fe822d9f73e457cb53375d97ff1d55f9241ec776a321f5634bd94e40758ddc8cb8",
+    "salt": "efe0e3572d0be69b37109106232a002e",
+    "role": "user",
+    "banned": false,
+    "createdAt": "2026-07-03T12:37:27.405Z",
+    "lastLoginAt": "2026-07-03T12:37:27.406Z"
+  },
+  {
+    "id": "usr_1783082593136_53f5afff",
+    "username": "sarah",
+    "passwordHash": "33b90f09874e2a76bb911220da544e36ca0a3218f713d35d92f4ca59fe18b6b1d425e0436041ee4c98aa16cf5ab84e1952e9ec142408a3218273368250b38aa2",
+    "salt": "c65337c7a474a5e3dadf154764fceaa6",
+    "role": "user",
+    "banned": false,
+    "createdAt": "2026-07-03T12:43:13.172Z",
+    "lastLoginAt": "2026-07-03T12:43:13.180Z"
+  },
+  {
+    "id": "usr_1783083050038_89f5b4bd",
+    "username": "adminown1",
+    "passwordHash": "84326e07e912fab4889c1f1f42d38fec6451996dcf44c9c3e83331755809b3b6e6fa4d60345394e50a7c2b3b229d6e2cf811588602b97bba974246145dd35990",
+    "salt": "f80999c447e48a1d04cc23b0d9719c03",
+    "role": "admin",
+    "banned": false,
+    "createdAt": "2026-07-03T12:50:50.073Z",
+    "lastLoginAt": "2026-07-03T13:35:27.204Z"
+  }
+]
