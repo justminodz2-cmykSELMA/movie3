@@ -33,10 +33,57 @@ export default async function handler(req: Request) {
     }
 
     const text = await response.text();
+    const limitParam = urlObj.searchParams.get("limit");
+    let resultText = text;
+
+    if (limitParam) {
+      const limit = parseInt(limitParam, 10);
+      if (!isNaN(limit) && limit > 0) {
+        const lines = text.split('\n');
+        const limitedLines: string[] = [];
+        let channelCount = 0;
+
+        if (lines.length > 0 && lines[0].trim().startsWith('#EXTM3U')) {
+          limitedLines.push(lines[0]);
+        }
+
+        const startIdx = lines.length > 0 && lines[0].trim().startsWith('#EXTM3U') ? 1 : 0;
+        for (let i = startIdx; i < lines.length; i++) {
+          const line = lines[i];
+          const trimmed = line.trim();
+          if (trimmed.startsWith('#EXTINF:')) {
+            if (channelCount >= limit) {
+              break;
+            }
+            limitedLines.push(line);
+            
+            // Collect the stream URL and associated metadata lines
+            for (let j = i + 1; j < lines.length; j++) {
+              const nextLine = lines[j];
+              const nextTrimmed = nextLine.trim();
+              if (nextTrimmed.startsWith('#EXTINF:')) {
+                i = j - 1;
+                break;
+              }
+              limitedLines.push(nextLine);
+              if (nextTrimmed.startsWith('http')) {
+                channelCount++;
+                i = j;
+                break;
+              }
+            }
+          } else if (trimmed !== '' && !trimmed.startsWith('#EXTM3U')) {
+            limitedLines.push(line);
+          }
+        }
+        resultText = limitedLines.join('\n');
+      }
+    }
+
     const newHeaders = new Headers(corsHeaders);
     newHeaders.set("Content-Type", "text/plain; charset=utf-8");
 
-    return new Response(text, {
+    return new Response(resultText, {
       status: 200,
       headers: newHeaders,
     });

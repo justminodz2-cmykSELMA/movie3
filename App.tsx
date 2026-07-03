@@ -51,6 +51,10 @@ const App: React.FC = () => {
   const [clickEffect, setClickEffect] = useState(false);
   
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (window.location.hash.includes('#/player') || window.location.hash.includes('#/iframe-player') || window.location.hash.includes('#/live/')) {
+        return;
+    }
+    
     if (e.key === 'Enter') {
       if (enterPressTimeout.current) {
         clearTimeout(enterPressTimeout.current);
@@ -118,15 +122,6 @@ const App: React.FC = () => {
         .map(el => {
             if (el.closest('[inert]')) return null;
 
-            // Fast visibility check: offsetParent is null if the element or its parent has display: none.
-            // Fixed/sticky elements also have offsetParent = null, so we query computed style only if offsetParent is null.
-            if (el.offsetParent === null) {
-                const style = window.getComputedStyle(el);
-                if (style.display === 'none' || style.visibility === 'hidden') {
-                    return null;
-                }
-            }
-
             const rect = el.getBoundingClientRect();
             if (rect.width <= 0 || rect.height <= 0) {
                 return null;
@@ -155,7 +150,7 @@ const App: React.FC = () => {
         switch (e.key) {
             case 'ArrowRight':
                 if (dx > 0) {
-                    distance = Math.abs(dy) * 2 + dx;
+                    distance = Math.abs(dy) * 10 + dx;
                     if (distance < minDistance) {
                         minDistance = distance;
                         bestCandidate = candidate;
@@ -164,7 +159,7 @@ const App: React.FC = () => {
                 break;
             case 'ArrowLeft':
                 if (dx < 0) {
-                    distance = Math.abs(dy) * 2 + Math.abs(dx);
+                    distance = Math.abs(dy) * 10 + Math.abs(dx);
                     if (distance < minDistance) {
                         minDistance = distance;
                         bestCandidate = candidate;
@@ -194,9 +189,8 @@ const App: React.FC = () => {
 
     if (bestCandidate) {
         bestCandidate.focus();
-        // TV browsers struggle immensely with smooth scrolling. Snappy instant scrolling is standard and extremely fast.
-        const isTV = showTvCursor || (typeof navigator !== 'undefined' && /SmartTV|Tizen|Web0S|AppleTV|AndroidTV|TV|PlayStation/i.test(navigator.userAgent));
-        bestCandidate.scrollIntoView({ behavior: isTV ? 'auto' : 'smooth', block: 'center', inline: 'nearest' });
+        // Snappy instant scrolling is standard and extremely fast, avoiding lag during rapid navigation or data loading.
+        bestCandidate.scrollIntoView({ behavior: 'auto', block: 'center', inline: 'nearest' });
     }
 }, [enterPressCount, showTvCursor, cursorPosition.x, cursorPosition.y]);
 

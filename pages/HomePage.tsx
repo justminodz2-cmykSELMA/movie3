@@ -1020,6 +1020,9 @@ const CineSatellitePromoBox: React.FC = () => {
   );
 };
 
+let cachedLiveTvChannels: LiveTvChannel[] | null = null;
+let lastLiveTvFetchTime: number = 0;
+
 const LiveTvRow: React.FC<{
   title: string;
   zIndex?: number;
@@ -1030,9 +1033,13 @@ const LiveTvRow: React.FC<{
   const rowContentRef = useRef<HTMLDivElement>(null);
   const rowRef = useRef<HTMLDivElement>(null);
   const [isInView, setIsInView] = useState(false);
-  const [channels, setChannels] = useState<LiveTvChannel[]>(liveTvChannels); // default static fallback
+  const [channels, setChannels] = useState<LiveTvChannel[]>(cachedLiveTvChannels || liveTvChannels); // default static fallback
 
   useEffect(() => {
+    const now = Date.now();
+    if (cachedLiveTvChannels && (now - lastLiveTvFetchTime) < 30 * 60 * 1000) {
+      return;
+    }
     // Fetch random channels
     fetchRandomCategoryChannels().then(randomChannels => {
       if (randomChannels.length > 0) {
@@ -1043,6 +1050,8 @@ const LiveTvRow: React.FC<{
           needsProxy: false,
           playerType: c.playerType as "iframe" | "hls" | undefined
         })) as LiveTvChannel[];
+        cachedLiveTvChannels = newRandoms;
+        lastLiveTvFetchTime = Date.now();
         setChannels(newRandoms);
       }
     });

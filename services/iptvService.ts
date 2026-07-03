@@ -57,7 +57,7 @@ export const getProxiedStreamUrl = (url: string): string => {
   return url;
 };
 
-export const parseM3u = (m3uText: string): IptvChannel[] => {
+export const parseM3u = (m3uText: string, maxChannels?: number): IptvChannel[] => {
   const lines = m3uText.split('\n');
   const channels: IptvChannel[] = [];
   let currentChannel: Partial<IptvChannel> = {};
@@ -84,6 +84,9 @@ export const parseM3u = (m3uText: string): IptvChannel[] => {
         currentChannel.playerType = 'hls';
         channels.push(currentChannel as IptvChannel);
         currentChannel = {};
+        if (maxChannels && channels.length >= maxChannels) {
+          break;
+        }
       }
     }
   }
@@ -96,10 +99,11 @@ export const fetchRandomCategoryChannels = async (): Promise<IptvChannel[]> => {
   const categoriesToPickFrom = iptvCategories.slice(1);
   const randomCategory = categoriesToPickFrom[Math.floor(Math.random() * categoriesToPickFrom.length)];
   try {
-    const response = await fetch(randomCategory.url);
+    const proxiedUrl = `/api/m3u-proxy?url=${encodeURIComponent(randomCategory.url)}&limit=100`;
+    const response = await fetch(proxiedUrl);
     if (!response.ok) throw new Error('Failed to fetch playlist');
     const text = await response.text();
-    return parseM3u(text);
+    return parseM3u(text, 100);
   } catch (error) {
     console.error('Error fetching random IPTV category:', error);
     return [];
