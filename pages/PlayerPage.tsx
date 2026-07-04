@@ -7,6 +7,7 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
 import { usePlayer, PipData } from '../contexts/PlayerContext';
 import { IMAGE_BASE_URL, BACKDROP_SIZE_MEDIUM } from '../contexts/constants';
+import { setPlayerActive } from '../services/playerActivity';
 import { GoogleGenAI, Type } from "@google/genai";
 
 interface ScheduledItem {
@@ -68,6 +69,13 @@ const PlayerPage: React.FC = () => {
     const [currentTime, setCurrentTime] = useState<number>(initialCurrentTime || 0);
     const [episodes, setEpisodes] = useState<Episode[]>([]);
     const [loading, setLoading] = useState(true);
+
+    // While the player page is open, pause non-essential background work
+    // (addon sync polling etc.) so the video gets all bandwidth.
+    useEffect(() => {
+        setPlayerActive(true);
+        return () => setPlayerActive(false);
+    }, []);
 
     useEffect(() => {
         setItem(initialItem);

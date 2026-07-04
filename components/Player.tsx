@@ -486,6 +486,8 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const [streamLinks, setStreamLinks] = useState<StreamLink[]>([]);
     const [activeStreamUrl, setActiveStreamUrl] = useState<string | null>(initialStreamUrl || null);
     const [activeQuality, setActiveQuality] = useState<string | null>(null);
+    // HLS level-based qualities (when a single m3u8 master exposes multiple renditions)
+    const [hlsQualities, setHlsQualities] = useState<string[]>([]);
     const [recommendations, setRecommendations] = useState<Movie[]>([]);
     
     const [isPlaying, setIsPlaying] = useState(false);
@@ -802,10 +804,11 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             setSkipSegments({ intro: null, outro: null });
             
             try {
-                // Fetch recommendations
+                // Fetch recommendations in the background — never block video start
                 if (!liveChannels && !isLiveScheduleMode) {
-                    const recsData = await fetchFromTMDB(`/${itemType}/${item.id}/recommendations`);
-                    if (isMounted) setRecommendations(recsData.results.filter((m: Movie) => m.backdrop_path));
+                    fetchFromTMDB(`/${itemType}/${item.id}/recommendations`)
+                        .then((recsData) => { if (isMounted) setRecommendations(recsData.results.filter((m: Movie) => m.backdrop_path)); })
+                        .catch(() => {});
                 }
 
 
@@ -876,6 +879,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         }
         const hls = new Hls.default();
         hlsRef.current = hls;
+        setHlsQualities([]);
         const savedTime = timeOnSwitchRef.current > 0 ? timeOnSwitchRef.current : (initialTime || 0);
         timeOnSwitchRef.current = 0;
         
@@ -915,12 +919,26 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             loadProxiedSource(activeStreamUrl, hls);
         } else if (activeStreamUrl.includes('.m3u8') && Hls.default.isSupported()) {
             let errorHandled = false;
+            let internalRetries = 0;
+            // Our own backend proxy URLs must never be wrapped in an external
+            // proxy (it breaks relative URLs). They self-heal server-side,
+            // so a simple delayed reload is the correct recovery.
+            const isInternalUrl = activeStreamUrl.startsWith('/api/') || activeStreamUrl.startsWith(window.location.origin);
             hls.on(Hls.default.Events.ERROR, (event, data) => {
                 if (data.fatal) {
                     switch (data.type) {
                         case Hls.default.ErrorTypes.NETWORK_ERROR:
-                            console.log("fatal network error encountered, try to recover using proxy");
-                            if (!errorHandled) {
+                            if (isInternalUrl) {
+                                if (internalRetries < 3) {
+                                    internalRetries++;
+                                    console.log(`fatal network error, retrying internal stream (${internalRetries}/3)`);
+                                    setTimeout(() => { try { hls.startLoad(); } catch {} }, 1000 * internalRetries);
+                                } else {
+                                    hls.destroy();
+                                    setToast({ message: t('noStreamLinks'), type: 'error' });
+                                }
+                            } else if (!errorHandled) {
+                                console.log("fatal network error encountered, try to recover using proxy");
                                 errorHandled = true;
                                 hls.destroy();
                                 const newHls = new Hls.default();
@@ -944,6 +962,19 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             hls.on(Hls.default.Events.MANIFEST_PARSED, () => {
                 video.currentTime = savedTime;
                 video.play().catch(() => {});
+                // Expose HLS renditions in the quality modal (Auto + heights),
+                // exactly like multi-link providers, when the source is a
+                // single master playlist with multiple levels.
+                try {
+                    const levels = hls.levels || [];
+                    if (levels.length > 1) {
+                        const heights = [...new Set(levels.map(l => l.height).filter(Boolean))].sort((a, b) => b - a);
+                        if (heights.length > 1) {
+                            setHlsQualities(heights.map(h => `${h}p`));
+                            hls.currentLevel = -1; // Auto by default
+                        }
+                    }
+                } catch {}
             });
         } else if (activeStreamUrl.includes('/api/live-proxy') && !activeStreamUrl.match(/\.(mp4|mkv|webm)$/i) && mpegts.isSupported()) {
             const player = mpegts.createPlayer({
@@ -1010,9 +1041,28 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
     // Effect for handling quality changes
     useEffect(() => {
-        // Do nothing if quality is not selected, video isn't ready, or there are no links
-        if (!activeQuality || !videoRef.current || streamLinks.length === 0) return;
+        // Do nothing if quality is not selected or video isn't ready
+        if (!activeQuality || !videoRef.current) return;
 
+        // HLS level-based switching (single master playlist): instant, no reload
+        if (hlsQualities.length > 0 && hlsRef.current) {
+            const hls = hlsRef.current;
+            if (activeQuality === 'Auto') {
+                if (hls.currentLevel !== -1) hls.currentLevel = -1;
+                return;
+            }
+            const wantedHeight = parseInt(activeQuality);
+            if (!isNaN(wantedHeight)) {
+                const idx = (hls.levels || []).findIndex(l => l.height === wantedHeight);
+                if (idx >= 0 && hls.currentLevel !== idx) {
+                    console.log(`Switching HLS level to: ${activeQuality}`);
+                    hls.currentLevel = idx;
+                }
+                return;
+            }
+        }
+
+        if (streamLinks.length === 0) return;
         const newLink = streamLinks.find(link => link.quality === activeQuality);
 
         // Check if a new link is found and it's different from the current one
@@ -1023,7 +1073,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             // Set the new stream URL, which will trigger the playback effect
             setActiveStreamUrl(newLink.url);
         }
-    }, [activeQuality, streamLinks, activeStreamUrl]);
+    }, [activeQuality, streamLinks, activeStreamUrl, hlsQualities]);
     
     // Effect 3: Process subtitles
     useEffect(() => {
@@ -1903,7 +1953,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     triggerRef={settingsButtonRef}
                     playbackRate={playbackRate}
                     onRateChange={setPlaybackRate}
-                    qualities={streamLinks.map(l => l.quality)}
+                    qualities={hlsQualities.length > 0 ? ['Auto', ...hlsQualities] : streamLinks.map(l => l.quality)}
                     activeQuality={activeQuality}
                     onQualityChange={setActiveQuality}
                     subtitleSettings={subtitleSettings}

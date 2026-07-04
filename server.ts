@@ -619,6 +619,9 @@ app.use((req, res, next) => {
   // ==========================================================
   // VS PROVIDER (TMDB-based): m3u8 extractor + HLS proxy
   // Works directly with TMDB ids: /api/vs-extract?type=movie&tmdb_id=..
+  // Optimized: first-success race, per-step timeouts, Redis cache,
+  // self-healing proxy (re-extracts on expired/IP-locked links),
+  // and edge cache headers so many viewers share cached responses.
   // ==========================================================
   const VS_PROVIDERS = [
     "https://vsembed.ru",
@@ -626,133 +629,170 @@ app.use((req, res, next) => {
     "https://vidsrcme.ru",
   ];
 
-  // Simple in-memory cache to avoid scraping same query repeatedly (15 minutes)
-  const vsCache = new Map<string, any>();
+  const VS_CACHE_TTL_MS = 1000 * 60 * 8; // 8 minutes (tokens expire)
+  const VS_STEP_TIMEOUT_MS = 6500;
+
+  // Small in-memory cache (per warm instance) + Redis (cross-instance)
+  // `local` marks results scraped by THIS instance (token matches our IP).
+  const vsCache = new Map<string, { timestamp: number; response: any; local: boolean }>();
+  const vsCacheSet = (key: string, response: any, local: boolean) => {
+    if (vsCache.size > 150) {
+      // drop oldest entries to keep memory light
+      const oldest = [...vsCache.keys()].slice(0, 50);
+      oldest.forEach((k) => vsCache.delete(k));
+    }
+    vsCache.set(key, { timestamp: Date.now(), response, local });
+  };
+
+  const vsFetch = (url: string, init: any = {}, timeoutMs = VS_STEP_TIMEOUT_MS) =>
+    fetch(url, {
+      redirect: "follow",
+      ...init,
+      signal: AbortSignal.timeout(timeoutMs),
+    });
 
   async function vsScrapeProvider(domain: string, targetUrl: string) {
-    console.log(`\n[VS ${domain}] Starting scrape for URL: ${targetUrl}`);
-    try {
-      // 1. Fetch the embed page
-      const embedRes = await fetch(targetUrl, { redirect: "follow" });
-      if (!embedRes.ok) throw new Error(`Embed fetch failed: ${embedRes.status}`);
-      const embedHtml = await embedRes.text();
+    // 1. Fetch the embed page
+    const embedRes = await vsFetch(targetUrl);
+    if (!embedRes.ok) throw new Error(`Embed fetch failed: ${embedRes.status}`);
+    const embedHtml = await embedRes.text();
 
-      // 2. Extract rcp URL from iframe
-      const rcpMatch = embedHtml.match(/src="\/\/(cloudorchestranova\.com\/rcp\/[^"]+)"/);
-      if (!rcpMatch) throw new Error("RCP iframe not found in embed page");
-      const rcpUrl = `https://${rcpMatch[1]}`;
+    // 2. Extract rcp URL from iframe
+    const rcpMatch = embedHtml.match(/src="\/\/(cloudorchestranova\.com\/rcp\/[^"]+)"/);
+    if (!rcpMatch) throw new Error("RCP iframe not found in embed page");
+    const rcpUrl = `https://${rcpMatch[1]}`;
 
-      // 3. Fetch the RCP page
-      const rcpRes = await fetch(rcpUrl, {
-        headers: { Referer: targetUrl },
-        redirect: "follow",
-      });
-      if (!rcpRes.ok) throw new Error(`RCP fetch failed: ${rcpRes.status}`);
-      const rcpHtml = await rcpRes.text();
+    // 3. Fetch the RCP page
+    const rcpRes = await vsFetch(rcpUrl, { headers: { Referer: targetUrl } });
+    if (!rcpRes.ok) throw new Error(`RCP fetch failed: ${rcpRes.status}`);
+    const rcpHtml = await rcpRes.text();
 
-      // 4. Extract prorcp URL
-      const prorcpMatch = rcpHtml.match(/src:\s*'(\/prorcp\/[^']+)'/);
-      if (!prorcpMatch) throw new Error("ProRCP URL not found in RCP page");
-      const prorcpUrl = `https://cloudorchestranova.com${prorcpMatch[1]}`;
+    // 4. Extract prorcp URL
+    const prorcpMatch = rcpHtml.match(/src:\s*'(\/prorcp\/[^']+)'/);
+    if (!prorcpMatch) throw new Error("ProRCP URL not found in RCP page");
+    const prorcpUrl = `https://cloudorchestranova.com${prorcpMatch[1]}`;
 
-      // 5. Fetch the ProRCP page
-      const prorcpRes = await fetch(prorcpUrl, {
-        headers: { Referer: rcpUrl },
-        redirect: "follow",
-      });
-      if (!prorcpRes.ok) throw new Error(`ProRCP fetch failed: ${prorcpRes.status}`);
-      const prorcpHtml = await prorcpRes.text();
+    // 5. Fetch the ProRCP page
+    const prorcpRes = await vsFetch(prorcpUrl, { headers: { Referer: rcpUrl } });
+    if (!prorcpRes.ok) throw new Error(`ProRCP fetch failed: ${prorcpRes.status}`);
+    const prorcpHtml = await prorcpRes.text();
 
-      // 6. Extract master_urls and token generation host
-      let masterUrls = "";
-      const masterUrlsMatch = prorcpHtml.match(/var\s+master_urls\s*=\s*['"]([^'"]+)['"]/i);
-      const fileMatch = prorcpHtml.match(/file:\s*['"](.*?)['"]/i);
+    // 6. Extract master_urls and token generation host
+    let masterUrls = "";
+    const masterUrlsMatch = prorcpHtml.match(/var\s+master_urls\s*=\s*['"]([^'"]+)['"]/i);
+    const fileMatch = prorcpHtml.match(/file:\s*['"](.*?)['"]/i);
 
-      if (masterUrlsMatch) {
-        masterUrls = masterUrlsMatch[1];
-      } else if (fileMatch) {
-        masterUrls = fileMatch[1];
+    if (masterUrlsMatch) {
+      masterUrls = masterUrlsMatch[1];
+    } else if (fileMatch) {
+      masterUrls = fileMatch[1];
+    } else {
+      const fallbackMatch = prorcpHtml.match(/(https:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/i);
+      if (fallbackMatch) {
+        masterUrls = fallbackMatch[1];
       } else {
-        const fallbackMatch = prorcpHtml.match(/(https:\/\/[^\s"'<>]+\.m3u8[^\s"'<>]*)/i);
-        if (fallbackMatch) {
-          masterUrls = fallbackMatch[1];
-        } else {
-          throw new Error("No stream URL found in ProRCP source");
-        }
+        throw new Error("No stream URL found in ProRCP source");
       }
-
-      let hlsUrl = masterUrls.split(" or ")[0];
-
-      // 7. Get token if needed
-      if (hlsUrl.includes("__TOKEN__")) {
-        const m3u8UrlObj = new URL(hlsUrl);
-        const tokenHost = m3u8UrlObj.host;
-        try {
-          const tokenRes = await fetch(`https://${tokenHost}/generate.php`, {
-            headers: { Referer: prorcpUrl },
-          });
-          if (tokenRes.ok) {
-            const token = await tokenRes.text();
-            hlsUrl = hlsUrl.replace(/__TOKEN__/g, token.trim());
-          }
-        } catch (e) {
-          console.warn(`[VS ${domain}] Failed to generate token:`, e);
-        }
-      }
-
-      // Proxy the hlsUrl to avoid IP lock issues on the client
-      const proxiedHlsUrl = `/api/vs-proxy/playlist.m3u8?url=${encodeURIComponent(hlsUrl)}`;
-
-      // 8. Extract subtitles
-      const subtitles: { lang: string; url: string }[] = [];
-      const subsMatch = prorcpHtml.match(/var\s+default_subtitles\s*=\s*['"]([^'"]+)['"]/i);
-      if (subsMatch && subsMatch[1] && subsMatch[1] !== "[]") {
-        const subsArray = subsMatch[1].split(",");
-        for (const sub of subsArray) {
-          const parts = sub.split("]");
-          if (parts.length === 2) {
-            subtitles.push({ lang: parts[0].replace("[", "").trim(), url: parts[1] });
-          } else {
-            subtitles.push({ lang: "Sub", url: sub });
-          }
-        }
-      }
-
-      return { hls_url: proxiedHlsUrl, subtitles, error: null };
-    } catch (error: any) {
-      console.error(`[VS ${domain}] Error: ${error.message}`);
-      return { hls_url: null, subtitles: [], error: error.message };
     }
+
+    let hlsUrl = masterUrls.split(" or ")[0];
+
+    // 7. Get token if needed
+    if (hlsUrl.includes("__TOKEN__")) {
+      const m3u8UrlObj = new URL(hlsUrl);
+      const tokenHost = m3u8UrlObj.host;
+      try {
+        const tokenRes = await vsFetch(`https://${tokenHost}/generate.php`, {
+          headers: { Referer: prorcpUrl },
+        }, 5000);
+        if (tokenRes.ok) {
+          const token = await tokenRes.text();
+          hlsUrl = hlsUrl.replace(/__TOKEN__/g, token.trim());
+        }
+      } catch (e) {
+        console.warn(`[VS ${domain}] Failed to generate token`);
+      }
+    }
+
+    // 8. Extract subtitles
+    const subtitles: { lang: string; url: string }[] = [];
+    const subsMatch = prorcpHtml.match(/var\s+default_subtitles\s*=\s*['"]([^'"]+)['"]/i);
+    if (subsMatch && subsMatch[1] && subsMatch[1] !== "[]") {
+      const subsArray = subsMatch[1].split(",");
+      for (const sub of subsArray) {
+        const parts = sub.split("]");
+        if (parts.length === 2) {
+          subtitles.push({ lang: parts[0].replace("[", "").trim(), url: parts[1] });
+        } else {
+          subtitles.push({ lang: "Sub", url: sub });
+        }
+      }
+    }
+
+    return { hlsUrl, subtitles };
   }
 
-  // Extract endpoint for m3u8 scraper (TMDB id based)
-  app.get("/api/vs-extract", async (req, res) => {
-    const type = (req.query.type as string) || "movie";
-    const tmdb_id = req.query.tmdb_id as string;
-    const season = req.query.season ? parseInt(req.query.season as string) : undefined;
-    const episode = req.query.episode ? parseInt(req.query.episode as string) : undefined;
+  // Race all domains, resolve with the FIRST successful scrape.
+  function vsFirstSuccess(urls: Record<string, string>): Promise<{ domain: string; hlsUrl: string; subtitles: any[] }> {
+    return new Promise((resolve, reject) => {
+      const entries = Object.entries(urls);
+      let pending = entries.length;
+      let done = false;
+      const errors: string[] = [];
+      for (const [domain, url] of entries) {
+        vsScrapeProvider(domain, url)
+          .then((r) => {
+            if (!done && r.hlsUrl) {
+              done = true;
+              resolve({ domain, hlsUrl: r.hlsUrl, subtitles: r.subtitles });
+            } else if (!done && --pending === 0) {
+              reject(new Error(errors.join(" | ") || "No stream found"));
+            }
+          })
+          .catch((e) => {
+            errors.push(`${domain}: ${e.message}`);
+            if (!done && --pending === 0) {
+              reject(new Error(errors.join(" | ")));
+            }
+          });
+      }
+    });
+  }
 
-    if (!tmdb_id) {
-      return res.status(400).json({
-        success: false,
-        error: "tmdb_id query param is required",
-        results: {},
-      });
+  // Compact self-heal context passed through proxy URLs so an expired /
+  // IP-locked link can be re-extracted transparently.
+  const vsPackCtx = (type: string, tmdb_id: string, season?: number, episode?: number) =>
+    Buffer.from(JSON.stringify({ t: type, i: tmdb_id, s: season, e: episode })).toString("base64url");
+  const vsUnpackCtx = (x: string): { t: string; i: string; s?: number; e?: number } | null => {
+    try { return JSON.parse(Buffer.from(x, "base64url").toString("utf-8")); } catch { return null; }
+  };
+
+  // Core extraction with caching. `fresh=true` bypasses caches (self-heal),
+  // but a just-refreshed result (< 20s old) is reused so a burst of healing
+  // playlist requests triggers only ONE re-scrape.
+  async function vsExtract(type: string, tmdb_id: string, season?: number, episode?: number, fresh = false) {
+    const cacheKey = `vsx:${type}:${tmdb_id}:${season ?? ""}:${episode ?? ""}`;
+
+    if (fresh) {
+      // Reuse only results scraped by THIS instance moments ago (burst of
+      // healing requests should trigger a single re-scrape).
+      const mem = vsCache.get(cacheKey);
+      if (mem && mem.local && Date.now() - mem.timestamp < 20000) return mem.response;
     }
 
-    if (type === "tv" && (season == null || episode == null)) {
-      return res.status(400).json({
-        success: false,
-        error: "season and episode query params are required for TV shows",
-        results: {},
-      });
-    }
-
-    const cacheKey = JSON.stringify(req.query);
-    const cached = vsCache.get(cacheKey);
-    if (cached && Date.now() - cached.timestamp < 1000 * 60 * 15) {
-      console.log("[VS] Serving from cache");
-      return res.json(cached.response);
+    if (!fresh) {
+      const mem = vsCache.get(cacheKey);
+      if (mem && Date.now() - mem.timestamp < VS_CACHE_TTL_MS) return mem.response;
+      if (redis) {
+        try {
+          const raw = await redisGet(cacheKey);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            vsCacheSet(cacheKey, parsed, false);
+            return parsed;
+          }
+        } catch {}
+      }
     }
 
     const urls = VS_PROVIDERS.reduce((acc: Record<string, string>, domain) => {
@@ -763,64 +803,123 @@ app.use((req, res, next) => {
       return acc;
     }, {});
 
+    const winner = await vsFirstSuccess(urls);
+    const result = {
+      domain: winner.domain,
+      hlsUrl: winner.hlsUrl,
+      subtitles: winner.subtitles,
+      ctx: vsPackCtx(type, tmdb_id, season, episode),
+    };
+
+    vsCacheSet(cacheKey, result, true);
+    if (redis) {
+      try { await redis.set(cacheKey, JSON.stringify(result), { ex: 60 * 8 }); } catch {}
+    }
+    return result;
+  }
+
+  // Extract endpoint for m3u8 scraper (TMDB id based)
+  app.get("/api/vs-extract", async (req, res) => {
+    const type = (req.query.type as string) || "movie";
+    const tmdb_id = req.query.tmdb_id as string;
+    const season = req.query.season ? parseInt(req.query.season as string) : undefined;
+    const episode = req.query.episode ? parseInt(req.query.episode as string) : undefined;
+
+    if (!tmdb_id) {
+      return res.status(400).json({ success: false, error: "tmdb_id query param is required", results: {} });
+    }
+    if (type === "tv" && (season == null || episode == null)) {
+      return res.status(400).json({ success: false, error: "season and episode query params are required for TV shows", results: {} });
+    }
+
     try {
-      const resultsArr = await Promise.all(
-        Object.entries(urls).map(async ([domain, url]) => {
-          try {
-            const result = await vsScrapeProvider(domain, url);
-            return [domain, result];
-          } catch (err: any) {
-            console.error(`[VS ${domain}] Final error: ${err.message}`);
-            return [
-              domain,
-              { hls_url: null, subtitles: [], error: err.message },
-            ];
-          }
-        })
-      );
-
-      const results = Object.fromEntries(resultsArr);
-      const success = Object.values(results).some((r: any) => r.hls_url);
-
-      const response = { success, results };
-
-      vsCache.set(cacheKey, {
-        timestamp: Date.now(),
-        response,
+      const r = await vsExtract(type, tmdb_id, season, episode);
+      const proxiedHlsUrl = `/api/vs-proxy/playlist.m3u8?url=${encodeURIComponent(r.hlsUrl)}&x=${r.ctx}`;
+      // Keep the response shape the frontend already understands.
+      res.set("Cache-Control", "public, max-age=0, s-maxage=240");
+      res.json({
+        success: true,
+        results: { [r.domain]: { hls_url: proxiedHlsUrl, subtitles: r.subtitles, error: null } },
       });
-
-      res.json(response);
-    } catch (err) {
-      res.status(500).json({
-        success: false,
-        error: "Unexpected server error",
-        results: {},
-      });
+    } catch (err: any) {
+      res.status(200).json({ success: false, error: err.message, results: {} });
     }
   });
+
+  const VS_UPSTREAM_HEADERS = (req: express.Request) => ({
+    "User-Agent": (req.headers["user-agent"] as string) || "Mozilla/5.0",
+    "Referer": "https://cloudorchestranova.com/",
+  });
+
+  // Fetch a playlist; if it fails and we have a self-heal context,
+  // re-extract a fresh link (fresh token from THIS instance's IP) and retry.
+  async function vsFetchPlaylistWithHeal(req: express.Request, targetUrl: string, xCtx?: string): Promise<{ text: string; finalUrl: string }> {
+    try {
+      const r = await vsFetch(targetUrl, { headers: VS_UPSTREAM_HEADERS(req) }, 8000);
+      if (r.ok) return { text: await r.text(), finalUrl: targetUrl };
+      throw new Error(`Upstream ${r.status}`);
+    } catch (firstErr: any) {
+      const ctx = xCtx ? vsUnpackCtx(xCtx) : null;
+      if (!ctx) throw firstErr;
+      console.warn(`[VS heal] playlist fetch failed (${firstErr.message}), re-extracting fresh link`);
+
+      // Self-heal: re-extract a fresh link (token bound to THIS instance's IP)
+      const fresh = await vsExtract(ctx.t, ctx.i, ctx.s, ctx.e, true);
+
+      // Fetch the fresh master playlist
+      const masterRes = await vsFetch(fresh.hlsUrl, { headers: VS_UPSTREAM_HEADERS(req) }, 8000);
+      if (!masterRes.ok) throw new Error(`Self-heal retry failed: ${masterRes.status}`);
+      const masterText = await masterRes.text();
+
+      // If the fresh playlist is a media playlist (no renditions), or the
+      // failing URL WAS the master (same path), we are done.
+      const pathOf = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
+      const isMasterPlaylist = masterText.includes("#EXT-X-STREAM-INF");
+      if (!isMasterPlaylist || pathOf(targetUrl) === pathOf(fresh.hlsUrl)) {
+        return { text: masterText, finalUrl: fresh.hlsUrl };
+      }
+
+      // The failing URL was a VARIANT: find the matching variant in the fresh
+      // master by longest common pathname suffix (rendition hash dir survives
+      // token refreshes), fallback to the first variant.
+      const masterBase = fresh.hlsUrl.substring(0, fresh.hlsUrl.lastIndexOf("/") + 1);
+      const masterOrigin = (() => { try { return new URL(fresh.hlsUrl).origin; } catch { return ""; } })();
+      const variants = masterText.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
+        .map((l) => (l.startsWith("http") ? l : l.startsWith("/") ? masterOrigin + l : masterBase + l));
+      if (variants.length === 0) throw new Error("Self-heal: fresh master has no variants");
+
+      const targetPath = pathOf(targetUrl);
+      const suffixLen = (a: string, b: string) => {
+        let n = 0;
+        while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
+        return n;
+      };
+      let healUrl = variants[0];
+      let best = -1;
+      for (const v of variants) {
+        const score = suffixLen(pathOf(v), targetPath);
+        if (score > best) { best = score; healUrl = v; }
+      }
+
+      const retry = await vsFetch(healUrl, { headers: VS_UPSTREAM_HEADERS(req) }, 8000);
+      if (!retry.ok) throw new Error(`Self-heal retry failed: ${retry.status}`);
+      return { text: await retry.text(), finalUrl: healUrl };
+    }
+  }
 
   // HLS playlist proxy (rewrites nested playlists and segments through our proxy)
   app.get("/api/vs-proxy/playlist.m3u8", async (req, res) => {
     const targetUrl = req.query.url as string;
+    const xCtx = req.query.x as string | undefined;
     if (!targetUrl) return res.status(400).send("Missing url");
 
     try {
-      const fetchRes = await fetch(targetUrl, {
-        headers: {
-          "User-Agent": (req.headers["user-agent"] as string) || "Mozilla/5.0",
-          "Referer": "https://cloudorchestranova.com/",
-        },
-      });
+      const { text: m3u8Content, finalUrl } = await vsFetchPlaylistWithHeal(req, targetUrl, xCtx);
 
-      if (!fetchRes.ok) {
-        return res.status(fetchRes.status).send("Failed to fetch m3u8");
-      }
-
-      const m3u8Content = await fetchRes.text();
-
-      const targetUrlObj = new URL(targetUrl);
+      const targetUrlObj = new URL(finalUrl);
       const hostUrl = `${targetUrlObj.protocol}//${targetUrlObj.host}`;
-      const baseUrl = targetUrl.substring(0, targetUrl.lastIndexOf("/") + 1);
+      const baseUrl = finalUrl.substring(0, finalUrl.lastIndexOf("/") + 1);
+      const xParam = xCtx ? `&x=${xCtx}` : "";
 
       const rewritten = m3u8Content
         .split("\n")
@@ -839,33 +938,93 @@ app.use((req, res, next) => {
 
           // Check if the URL is another m3u8 or a ts chunk
           if (fullUrl.includes(".m3u8")) {
-            return `/api/vs-proxy/playlist.m3u8?url=${encodeURIComponent(fullUrl)}`;
+            return `/api/vs-proxy/playlist.m3u8?url=${encodeURIComponent(fullUrl)}${xParam}`;
           } else {
-            return `/api/vs-proxy/ts?url=${encodeURIComponent(fullUrl)}`;
+            return `/api/vs-proxy/ts?url=${encodeURIComponent(fullUrl)}${xParam}`;
           }
         })
         .join("\n");
 
       res.set("Content-Type", "application/vnd.apple.mpegurl");
+      res.set("Access-Control-Allow-Origin", "*");
+      // VOD playlists rarely change: let the browser + edge cache them briefly
+      res.set("Cache-Control", "public, max-age=30, s-maxage=120");
       res.send(rewritten);
     } catch (err: any) {
-      res.status(500).send("Proxy error: " + err.message);
+      res.status(502).send("Proxy error: " + err.message);
     }
   });
 
-  // HLS segment proxy
+  // Self-heal for a SEGMENT: re-extract, walk fresh master -> matching variant
+  // -> segment with the same basename. Handles expired / IP-locked tokens.
+  async function vsHealSegment(req: express.Request, targetUrl: string, xCtx: string): Promise<string | null> {
+    try {
+      const ctx = vsUnpackCtx(xCtx);
+      if (!ctx) return null;
+      const fresh = await vsExtract(ctx.t, ctx.i, ctx.s, ctx.e, true);
+      const masterRes = await vsFetch(fresh.hlsUrl, { headers: VS_UPSTREAM_HEADERS(req) }, 8000);
+      if (!masterRes.ok) return null;
+      const masterText = await masterRes.text();
+      const masterBase = fresh.hlsUrl.substring(0, fresh.hlsUrl.lastIndexOf("/") + 1);
+      const masterOrigin = (() => { try { return new URL(fresh.hlsUrl).origin; } catch { return ""; } })();
+      const absolutize = (l: string, base: string) => (l.startsWith("http") ? l : l.startsWith("/") ? masterOrigin + l : base + l);
+      const pathOf = (u: string) => { try { return new URL(u).pathname; } catch { return u; } };
+      const suffixLen = (a: string, b: string) => {
+        let n = 0;
+        while (n < a.length && n < b.length && a[a.length - 1 - n] === b[b.length - 1 - n]) n++;
+        return n;
+      };
+      const targetPath = pathOf(targetUrl);
+      const targetDir = targetPath.substring(0, targetPath.lastIndexOf("/") + 1);
+      const targetName = targetPath.split("/").pop();
+
+      // Candidate media playlists: the master itself (if media) or its variants
+      let mediaUrls: string[] = [];
+      if (masterText.includes("#EXT-X-STREAM-INF")) {
+        mediaUrls = masterText.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
+          .map((l) => absolutize(l, masterBase));
+        // best variant first: the one whose dir matches the failing segment's dir
+        mediaUrls.sort((a, b) => suffixLen(pathOf(b).substring(0, pathOf(b).lastIndexOf("/") + 1), targetDir) - suffixLen(pathOf(a).substring(0, pathOf(a).lastIndexOf("/") + 1), targetDir));
+        mediaUrls = mediaUrls.slice(0, 2);
+      } else {
+        mediaUrls = [fresh.hlsUrl];
+      }
+
+      for (const mu of mediaUrls) {
+        const mRes = await vsFetch(mu, { headers: VS_UPSTREAM_HEADERS(req) }, 8000);
+        if (!mRes.ok) continue;
+        const mText = await mRes.text();
+        const mBase = mu.substring(0, mu.lastIndexOf("/") + 1);
+        const segs = mText.split("\n").map((l) => l.trim()).filter((l) => l && !l.startsWith("#"))
+          .map((l) => absolutize(l, mBase));
+        const match = segs.find((s) => pathOf(s).split("/").pop() === targetName);
+        if (match) return match;
+      }
+    } catch (e: any) {
+      console.warn(`[VS heal] segment heal failed: ${e.message}`);
+    }
+    return null;
+  }
+
+  // HLS segment proxy (streams + strong cache so concurrent viewers hit the edge cache)
   app.get("/api/vs-proxy/ts", async (req, res) => {
     const targetUrl = req.query.url as string;
+    const xCtx = req.query.x as string | undefined;
     if (!targetUrl) return res.status(400).send("Missing url");
 
-    try {
-      const fetchRes = await fetch(targetUrl, {
-        headers: {
-          "User-Agent": (req.headers["user-agent"] as string) || "Mozilla/5.0",
-          "Referer": "https://cloudorchestranova.com/",
-        },
-      });
+    const attempt = (u: string) => vsFetch(u, { headers: VS_UPSTREAM_HEADERS(req) }, 15000);
 
+    try {
+      let fetchRes = await attempt(targetUrl).catch(() => null as any);
+      if ((!fetchRes || !fetchRes.ok) && xCtx) {
+        // Token expired / IP-locked: self-heal via fresh extraction
+        const healed = await vsHealSegment(req, targetUrl, xCtx);
+        if (healed) fetchRes = await attempt(healed).catch(() => fetchRes);
+      }
+      if (!fetchRes || !fetchRes.ok) {
+        // one last quick retry — segment hosts occasionally hiccup
+        fetchRes = await attempt(targetUrl);
+      }
       if (!fetchRes.ok) {
         return res.status(fetchRes.status).send("Failed to fetch ts");
       }
@@ -873,6 +1032,10 @@ app.use((req, res, next) => {
       // Always force MPEG-TS video content type to avoid MIME-type decode issues in browsers
       res.set("Content-Type", "video/mp2t");
       res.set("Access-Control-Allow-Origin", "*");
+      // Segments are immutable: cache aggressively at edge + browser
+      res.set("Cache-Control", "public, max-age=3600, s-maxage=86400, immutable");
+      const len = fetchRes.headers.get("content-length");
+      if (len) res.set("Content-Length", len);
 
       // stream the response
       if (fetchRes.body) {
@@ -883,7 +1046,7 @@ app.use((req, res, next) => {
       }
     } catch (err: any) {
       if (!res.headersSent) {
-        res.status(500).send("Proxy error: " + err.message);
+        res.status(502).send("Proxy error: " + err.message);
       }
     }
   });
@@ -894,12 +1057,14 @@ app.use((req, res, next) => {
     if (!fileUrl) return res.status(400).send("Missing subtitle URL");
 
     try {
-      const subtitleRes = await fetch(fileUrl);
+      const subtitleRes = await vsFetch(fileUrl, {}, 10000);
       const raw = await subtitleRes.text();
 
+      res.setHeader("Access-Control-Allow-Origin", "*");
+      res.setHeader("Content-Type", "text/vtt");
+      res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
+
       if (raw.trim().startsWith("WEBVTT")) {
-        res.setHeader("Content-Type", "text/vtt");
-        res.setHeader("Access-Control-Allow-Origin", "*");
         return res.send(raw);
       }
 
@@ -914,8 +1079,6 @@ app.use((req, res, next) => {
           )
           .join("\n");
 
-      res.setHeader("Content-Type", "text/vtt");
-      res.setHeader("Access-Control-Allow-Origin", "*");
       res.send(vtt);
     } catch (err: any) {
       console.error("[VS] Subtitle Proxy Error:", err.message);

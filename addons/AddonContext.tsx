@@ -13,6 +13,7 @@ import { buildAddonManifest } from './runtime';
 import { BUILTIN_ADDON_SOURCES } from './builtins';
 import { useProfile } from '../contexts/ProfileContext';
 import { getToken } from '../services/authService';
+import { isPlayerActive } from '../services/playerActivity';
 import {
   createStudioLink, fetchStudioAddons, saveStudioAddons, buildStudioUrl,
 } from '../services/studioService';
@@ -226,8 +227,10 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
       }
     };
     sync(true);
-    const interval = window.setInterval(() => sync(), 15000);
-    const onVisible = () => { if (document.visibilityState === 'visible') sync(); };
+    // Sleep the sync while the video player is open — playback gets
+    // all the bandwidth. Sync resumes automatically when leaving the player.
+    const interval = window.setInterval(() => { if (!isPlayerActive()) sync(); }, 15000);
+    const onVisible = () => { if (document.visibilityState === 'visible' && !isPlayerActive()) sync(); };
     document.addEventListener('visibilitychange', onVisible);
     window.addEventListener('focus', onVisible);
     return () => {
