@@ -51,6 +51,7 @@ const TopNavbar: React.FC = () => {
           <NavLink to="/ai-search" className={({isActive}) => `${navItemClasses} ${isActive ? activeNavItemClasses : ''}`}>{t('aiSearch')}</NavLink>
           
           <NavLink to="/favorites" className={({isActive}) => `${navItemClasses} ${isActive ? activeNavItemClasses : ''}`}>{t('myList')}</NavLink>
+          <NavLink to="/addons" className={({isActive}) => `${navItemClasses} ${isActive ? activeNavItemClasses : ''}`}>{t('addons')}</NavLink>
 
         </nav>
       </div>
@@ -85,6 +86,7 @@ const BottomNavbar: React.FC = () => {
     { to: '/iptv', text: t('liveTv'), icon: 'fa-solid fa-broadcast-tower' },
     { to: '/ai-search', text: t('aiSearch'), icon: 'fa-solid fa-wand-magic-sparkles' },
     { to: '/favorites', text: t('myList'), icon: 'fa-solid fa-bookmark' },
+    { to: '/addons', text: t('addons'), icon: 'fa-solid fa-puzzle-piece' },
   ];
 
   return (

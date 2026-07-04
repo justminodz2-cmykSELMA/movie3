@@ -39,6 +39,21 @@ export const translations = {
     'aiGreeting': "Hello! I'm your movie-finding assistant. Describe what you're in the mood for, and I'll find something for you to watch.",
     'aiSearching': 'Searching for recommendations...',
 
+    // Addons
+    'addons': 'Addons',
+    'addonStudio': 'Addon Studio',
+    'latestAddons': 'Latest Addons',
+    'createAddon': 'Create Addon',
+    'myAddons': 'My Addons',
+    'addonDocs': 'Language Docs',
+    'installAddon': 'Install Addon',
+    'addonInstalled': 'Addon installed successfully',
+    'addonUpdated': 'Addon updated successfully',
+    'addonRemoved': 'Addon removed',
+    'applyTheme': 'Apply Theme',
+    'themeApplied': 'Theme applied',
+    'resetTheme': 'Reset Theme',
+
     // Layout & Nav
     'home': 'Home',
     'tvShows': 'TV Shows',
@@ -294,7 +309,7 @@ export const translations = {
     // General
     'save': 'حفظ',
     'cancel': 'إلغاء',
-    'delete': 'حذف',
+    'delete': 'ح��ف',
     'viewAll': 'عرض الكل',
     'play': 'تشغيل',
     'details': 'تفاصيل',
@@ -327,6 +342,21 @@ export const translations = {
     'aiSearchPlaceholder': 'صف فيلماً أو مسلسلاً للعثور عليه...',
     'aiGreeting': "مرحباً! أنا مساعدك في العثور على الأفلام. صف ما ترغب في مشاهدته، وسأجد لك شيئاً مناسباً.",
     'aiSearching': 'جاري البحث عن توصيات...',
+
+    // Addons
+    'addons': 'الإضافات',
+    'addonStudio': 'استوديو الإضافات',
+    'latestAddons': 'أحدث الإضافات',
+    'createAddon': 'إنشاء إضافة',
+    'myAddons': 'إضافاتي',
+    'addonDocs': 'وثائق اللغة',
+    'installAddon': 'تثبيت الإضافة',
+    'addonInstalled': 'تم تثبيت الإضافة بنجاح',
+    'addonUpdated': 'تم تحديث الإضافة بنجاح',
+    'addonRemoved': 'تمت إزالة الإضافة',
+    'applyTheme': 'تطبيق السمة',
+    'themeApplied': 'تم تطبيق السمة',
+    'resetTheme': 'إعادة تعيين السمة',
 
     // Layout & Nav
     'home': 'الرئيسية',

@@ -11,6 +11,7 @@ import { Movie, YTPlayer, HistoryItem } from "../types";
 import { useProfile } from "../contexts/ProfileContext";
 import { useTranslation } from "../contexts/LanguageContext";
 import Layout from "../components/Layout";
+import AddonsRow from "../components/AddonsRow";
 import {
   IMAGE_BASE_URL,
   BACKDROP_SIZE,
