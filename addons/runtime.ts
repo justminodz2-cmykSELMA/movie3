@@ -93,7 +93,7 @@ export async function buildAddonManifest(source: string): Promise<RunResult> {
     if (page.rows.length >= MAX_ROWS_PER_PAGE) throw new Error(`Max ${MAX_ROWS_PER_PAGE} rows per page`);
     const row: AddonRow = {
       title: cleanString(title || 'Row', 120),
-      shape: (['poster', 'wide', 'circle'].includes(String(shape)) ? String(shape) : 'poster') as AddonRow['shape'],
+      shape: (['poster', 'wide', 'circle', 'square'].includes(String(shape)) ? String(shape) : 'poster') as AddonRow['shape'],
       items: [],
     };
     page.rows.push(row);

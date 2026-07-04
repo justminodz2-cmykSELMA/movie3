@@ -36,7 +36,7 @@ export interface AddonItem {
 
 export interface AddonRow {
   title: string;
-  shape?: 'poster' | 'wide' | 'circle';
+  shape?: 'poster' | 'wide' | 'circle' | 'square';
   items: AddonItem[];
 }
 

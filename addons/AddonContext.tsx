@@ -10,8 +10,7 @@ import React, {
 import { InstalledAddon, AddonManifest, AddonPageDef } from './types';
 import { buildAddonManifest } from './runtime';
 import { BUILTIN_ADDON_SOURCES } from './builtins';
-
-const STORAGE_KEY = 'cineStreamAddons_v1';
+import { useProfile } from '../contexts/ProfileContext';
 
 export interface AddonTab {
   addonId: string;
@@ -35,9 +34,9 @@ interface AddonContextType {
 
 const AddonContext = createContext<AddonContextType | undefined>(undefined);
 
-function loadStored(): InstalledAddon[] | null {
+function loadStored(storageKey: string): InstalledAddon[] | null {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey);
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : null;
@@ -46,9 +45,9 @@ function loadStored(): InstalledAddon[] | null {
   }
 }
 
-function persist(addons: InstalledAddon[]) {
+function persist(storageKey: string, addons: InstalledAddon[]) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(addons));
+    localStorage.setItem(storageKey, JSON.stringify(addons));
   } catch (e) {
     console.warn('Failed to persist addons:', e);
   }
@@ -84,12 +83,19 @@ function applyTheme(theme: Record<string, string> | null) {
 export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [addons, setAddons] = useState<InstalledAddon[]>([]);
   const [loading, setLoading] = useState(true);
+  const { activeProfile } = useProfile();
 
-  // Initial load: stored addons, or seed the built-in gallery on first run.
+  // Addons are per-profile: each account/profile has its own installed
+  // addons and its own theme; changes never leak to other profiles.
+  const storageKey = `cineStreamAddons_v1_${activeProfile?.id || 'default'}`;
+
+  // Load per-profile addons (re-runs when the active profile changes),
+  // or seed the built-in gallery on this profile's first run.
   useEffect(() => {
     let cancelled = false;
     const init = async () => {
-      const stored = loadStored();
+      setLoading(true);
+      const stored = loadStored(storageKey);
       if (stored) {
         if (!cancelled) { setAddons(stored); setLoading(false); }
         // Background refresh of enabled addon manifests (best effort).
@@ -102,7 +108,7 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             return a; // keep cached manifest — never break the app
           }
         }));
-        if (!cancelled) { setAddons(refreshed); persist(refreshed); }
+        if (!cancelled) { setAddons(refreshed); persist(storageKey, refreshed); }
         return;
       }
       // First run: seed built-ins (pages enabled, theme/provider examples installed but disabled).
@@ -122,11 +128,11 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           console.warn('Builtin addon failed to load:', e);
         }
       }
-      if (!cancelled) { setAddons(seeded); persist(seeded); setLoading(false); }
+      if (!cancelled) { setAddons(seeded); persist(storageKey, seeded); setLoading(false); }
     };
     init();
     return () => { cancelled = true; };
-  }, []);
+  }, [storageKey]);
 
   // Apply the most recently enabled theme addon (or restore defaults).
   useEffect(() => {
@@ -152,29 +158,29 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             ? { ...installed, builtin: a.builtin, installedAt: a.installedAt }
             : a)
         : [...prev, installed];
-      persist(next);
+      persist(storageKey, next);
       return next;
     });
     return installed;
-  }, []);
+  }, [storageKey]);
 
   const uninstallAddon = useCallback((id: string) => {
     setAddons(prev => {
       const next = prev.filter(a => a.manifest.meta.id !== id);
-      persist(next);
+      persist(storageKey, next);
       return next;
     });
-  }, []);
+  }, [storageKey]);
 
   const toggleAddon = useCallback((id: string) => {
     setAddons(prev => {
       const next = prev.map(a => a.manifest.meta.id === id
         ? { ...a, enabled: !a.enabled, updatedAt: Date.now() }
         : a);
-      persist(next);
+      persist(storageKey, next);
       return next;
     });
-  }, []);
+  }, [storageKey]);
 
   const getAddon = useCallback(
     (id: string) => addons.find(a => a.manifest.meta.id === id),

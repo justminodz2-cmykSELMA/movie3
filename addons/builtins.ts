@@ -103,7 +103,7 @@ fillRow(p.row("Legendary Anime Movies"), "/discover/movie", {
   with_genres: "16", with_origin_country: "JP", sort_by: "vote_count.desc"
 }, "movie")
 
-fillRow(p.row("Top Rated This Year"), "/discover/tv", {
+fillRow(p.row("Top Rated This Year", "square"), "/discover/tv", {
   with_genres: "16", with_origin_country: "JP",
   sort_by: "vote_average.desc", "vote_count.gte": "200"
 }, "tv")
@@ -205,7 +205,7 @@ LANGUAGE BASICS
 
 BUILD PAGES & TABS
   let p = page("Books", "fa-solid fa-book")        // new tab + page
-  let row = p.row("Trending")                      // add a row ("poster"|"wide"|"circle")
+  let row = p.row("Trending")                      // add a row ("poster"|"wide"|"circle"|"square")
   row.add({ title, subtitle, image, badge, url, play })
   row.addAll(listOfItems)
   Item actions: tmdb item -> opens details • play: url -> opens player • url -> opens browser
