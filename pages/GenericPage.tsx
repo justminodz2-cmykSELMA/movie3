@@ -62,6 +62,7 @@ const ItemCard: React.FC<{ item: Movie | FavoriteItem, index: number }> = ({ ite
                     alt={title}
                     className="object-cover w-full aspect-video"
                     loading="lazy"
+            decoding="async"
                 />
                 </div>
             </div>
@@ -178,6 +179,7 @@ const GenericPage: React.FC<{
                   alt={item.title || item.name}
                   className="object-cover w-full aspect-video"
                   loading="lazy"
+            decoding="async"
                 />
                 <div className="quick-view bg-[var(--surface)] px-3">
                    <div className="flex items-center justify-between">

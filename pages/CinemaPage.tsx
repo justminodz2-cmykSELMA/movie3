@@ -45,6 +45,7 @@ const SpotlightCinemaCard: React.FC<{ item: Movie; index: number }> = ({ item, i
                     alt={item.title || item.name}
                     className="object-cover w-full h-full"
                     loading="lazy"
+            decoding="async"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent"></div>
                 <div className="absolute top-3 left-3 px-2.5 py-1 text-xs font-bold text-white bg-red-600 rounded-md shadow-lg flex items-center gap-1.5 animate-pulse-live">
@@ -132,6 +133,7 @@ const CinemaCard: React.FC<{ item: Movie; index: number }> = ({ item, index }) =
                     alt={item.title || item.name}
                     className="object-cover w-full h-full"
                     loading="lazy"
+            decoding="async"
                 />
                 <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent"></div>
                 <div className="absolute top-3 left-3 px-2.5 py-1 text-xs font-bold text-white bg-red-600 rounded-md shadow-lg flex items-center gap-1.5 animate-pulse-live">

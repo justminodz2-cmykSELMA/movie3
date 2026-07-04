@@ -293,6 +293,7 @@ const PosterCard: React.FC<{
               alt={mainTitle}
               className={`object-cover w-full h-full`}
               loading="lazy"
+            decoding="async"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent pointer-events-none"></div>
 
@@ -455,6 +456,7 @@ const PosterCard: React.FC<{
             alt={movie.title || movie.name}
             className={`object-cover w-full h-full absolute inset-0 transition-opacity duration-700 ${showVideo ? "opacity-0" : "opacity-100"}`}
             loading="lazy"
+            decoding="async"
           />
           <div
             className={`absolute inset-0 w-full h-full transition-opacity duration-700 ${showVideo ? "opacity-100" : "opacity-0 pointer-events-none"}`}
@@ -700,6 +702,7 @@ const SimpleBackdropCard: React.FC<{
             alt={movie.title || movie.name}
             className="object-cover w-full aspect-video"
             loading="lazy"
+            decoding="async"
           />
           <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
             <i className="fas fa-play text-white text-3xl drop-shadow-lg"></i>
@@ -773,6 +776,7 @@ const TopTenCard: React.FC<{
           alt={movie.title || movie.name}
           className="w-full aspect-[2/3] object-cover rounded-lg shadow-lg"
           loading="lazy"
+            decoding="async"
         />
       </div>
     </div>

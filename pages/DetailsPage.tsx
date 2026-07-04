@@ -43,6 +43,7 @@ const SimilarItemCard: React.FC<{ item: Movie, index: number }> = ({ item, index
           alt={item.title || item.name}
           className="object-cover w-full aspect-[3/4]"
           loading="lazy"
+            decoding="async"
         />
       </div>
       <div className="pt-2 text-center">

@@ -141,7 +141,9 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
           seeded.push({
             source,
             manifest,
-            enabled: manifest.meta.type === 'page',
+            // All built-in addons (incl. Books/Anime tabs) start disabled;
+            // the user opts in from the Addons settings page.
+            enabled: false,
             builtin: true,
             installedAt: Date.now(),
             updatedAt: Date.now(),

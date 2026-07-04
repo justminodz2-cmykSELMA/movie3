@@ -19,7 +19,10 @@
         }
       })();
     </script>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind is now pre-compiled at build time into /index.css (linked at the
+         end of <head>, same cascade position as the old runtime-injected styles).
+         This removes the in-browser Tailwind compiler, which re-scanned the DOM on
+         every change and was a major CPU drain on TVs and low-power devices. -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet" />
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -182,6 +185,12 @@
 
       .interactive-card {
         transition: transform 0.3s ease-out, box-shadow 0.3s ease-out !important;
+      }
+      /* Promote to a GPU layer only while actually interacting — keeping
+         will-change on every card permanently forces one compositor layer
+         per card, which exhausts memory on TVs. Visual result is identical. */
+      .interactive-card-container:hover .interactive-card,
+      .interactive-card-container:focus-within .interactive-card {
         will-change: transform;
       }
       .interactive-card-container {
@@ -492,7 +501,9 @@
       .top-ten-row .flex-shrink-0 {
         opacity: 0;
         transform: translateY(30px) scale(0.98);
-        will-change: transform, opacity;
+        /* (perf) no permanent will-change here: the browser promotes layers
+           automatically during the entrance animation; keeping the hint forever
+           created hundreds of compositor layers and stuttering on TV devices. */
       }
 
       /* When the row is in view, trigger the animation on the cards */

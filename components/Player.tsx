@@ -2047,6 +2047,7 @@ const PlayerRecommendationCard: React.FC<{
                         alt={rec.title || rec.name} 
                         className="w-full aspect-video object-cover animate-page-enter" 
                         loading="lazy"
+            decoding="async"
                     />
                 </div>
             </div>

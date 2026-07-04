@@ -96,6 +96,7 @@ const RecommendationCard: React.FC<{ item: Movie; dataFocusGroup?: string; dataF
                     alt={item.title || item.name}
                     className="w-full aspect-video object-cover"
                     loading="lazy"
+            decoding="async"
                 />
                  <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                     <i className="fas fa-play text-white text-3xl drop-shadow-lg"></i>

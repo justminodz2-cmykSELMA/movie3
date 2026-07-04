@@ -53,6 +53,7 @@ const FilmographyListItem: React.FC<{ item: Movie, index: number }> = ({ item, i
           alt={item.title || item.name}
           className="object-cover w-full aspect-video transition-transform duration-300 group-hover:scale-105"
           loading="lazy"
+            decoding="async"
         />
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
             <i className="fa-solid fa-play text-white text-3xl"></i>

@@ -1,0 +1,4 @@
+/* Tailwind entry — compiled by the build into public/index.css */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;

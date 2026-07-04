@@ -204,7 +204,10 @@ export const LatestAddonsRow: React.FC<{ zIndex?: number }> = ({ zIndex }) => {
           {t('addonStudio')} <i className="fa-solid fa-arrow-right text-[10px]" />
         </button>
       </div>
-      <div ref={scrollContainerRef} className="overflow-hidden">
+      {/* py-12/-my-12 gives the focus glow (60px blur) room to render without
+          being hard-clipped top/bottom by this overflow-hidden scroll container,
+          while keeping the row's outer layout size exactly the same. */}
+      <div ref={scrollContainerRef} className="overflow-hidden py-12 -my-12">
         <div
           ref={rowContentRef}
           className="flex gap-5 px-6 py-4 transition-transform duration-300 ease-out"

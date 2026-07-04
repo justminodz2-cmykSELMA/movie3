@@ -139,7 +139,8 @@ const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; 
             <div className="relative transition-all duration-300 ease-in-out transform rounded-lg shadow-lg interactive-card">
                 {isNetflixOriginal && ( <span style={{ fontFamily: "'Anton', sans-serif", textShadow: '1px 1px 3px rgba(0,0,0,0.5)' }} className="absolute top-2 left-2 z-10 text-3xl font-black text-[var(--primary)] pointer-events-none">V</span> )}
                 <div className="relative w-full aspect-video bg-black rounded-t-lg overflow-hidden" onClick={() => onCardClick(movie)}>
-                    <img src={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${movie.backdrop_path}`} alt={movie.title || movie.name} className={`object-cover w-full h-full absolute inset-0 transition-opacity duration-700 ${showVideo ? 'opacity-0' : 'opacity-100'}`} loading="lazy" />
+                    <img src={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${movie.backdrop_path}`} alt={movie.title || movie.name} className={`object-cover w-full h-full absolute inset-0 transition-opacity duration-700 ${showVideo ? 'opacity-0' : 'opacity-100'}`} loading="lazy"
+            decoding="async" />
                     <div className={`absolute inset-0 w-full h-full transition-opacity duration-700 ${showVideo ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                           <div id={playerContainerId} className="w-full h-full pointer-events-none" />
                           <div className="absolute inset-0" />
@@ -304,6 +305,7 @@ const FilteredItemCard: React.FC<{ item: Movie; index: number }> = ({ item, inde
                     alt={item.title || item.name}
                     className="object-cover w-full aspect-video rounded-lg"
                     loading="lazy"
+            decoding="async"
                 />
             </div>
             <div className="mt-2 text-left min-h-[1.5rem]">

@@ -98,7 +98,8 @@ const AddonItemCard: React.FC<{
       >
         <div className="addon-card-frame relative overflow-hidden bg-zinc-900 shadow-lg border border-zinc-700/60 transition-shadow duration-300 rounded-full w-32 h-32 md:w-36 md:h-36">
           {item.image && !imgError ? (
-            <img src={item.image} alt={item.title} loading="lazy" onError={() => setImgError(true)} className="w-full h-full object-cover" />
+            <img src={item.image} alt={item.title} loading="lazy"
+            decoding="async" onError={() => setImgError(true)} className="w-full h-full object-cover" />
           ) : (
             <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center"
                  style={{ background: `radial-gradient(circle at 30% 25%, ${color}26 0%, #18181b 60%, #09090b 100%)` }}>
@@ -133,6 +134,7 @@ const AddonItemCard: React.FC<{
               src={item.image}
               alt={item.title}
               loading="lazy"
+            decoding="async"
               onError={() => setImgError(true)}
               className="object-cover w-full h-full"
             />
