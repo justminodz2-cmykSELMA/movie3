@@ -18,6 +18,7 @@ import {
   POSTER_SIZE,
 } from "../contexts/constants";
 import { fetchRandomCategoryChannels, IptvChannel, getProxiedStreamUrl } from "../services/iptvService";
+import { LatestAddonsRow } from "../addons/AddonComponents";
 
 const AmbientBackground: React.FC<{ imageUrl: string | null }> = ({
   imageUrl,
@@ -1659,6 +1660,10 @@ const HomePage: React.FC = () => {
                 zIndex={13}
                 onItemFocus={handleItemFocus}
               />
+
+              {/* Latest addons — circular row */}
+              <LatestAddonsRow zIndex={14} />
+
               {data.smartRecommendations?.length > 0 && (
                 <ContentRow
                   title={data.smartRecommendationsReason || (language === 'ar' ? 'ترشيحات ذكية مخصصة لك' : 'Recommended For You')}

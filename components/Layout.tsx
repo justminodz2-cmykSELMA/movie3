@@ -2,11 +2,13 @@ import React, { useEffect } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
+import { useAddons } from '../addons/AddonContext';
 
 const TopNavbar: React.FC = () => {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { activeProfile, switchProfile } = useProfile();
+  const { tabs: addonTabs } = useAddons();
 
   const navLinks = [
     { to: '/home', text: t('home') },
@@ -52,6 +54,17 @@ const TopNavbar: React.FC = () => {
           
           <NavLink to="/favorites" className={({isActive}) => `${navItemClasses} ${isActive ? activeNavItemClasses : ''}`}>{t('myList')}</NavLink>
 
+          {/* Addon-registered tabs */}
+          {addonTabs.map(tab => (
+            <NavLink key={tab.route} to={tab.route} className={({isActive}) => `${navItemClasses} ${isActive ? activeNavItemClasses : ''}`}>
+              <i className={`${tab.icon} mr-1.5 text-sm`}></i>{tab.title}
+            </NavLink>
+          ))}
+
+          <NavLink to="/addons" aria-label={t('addons')} title={t('addons')} className={({isActive}) => `${navItemClasses} ${isActive ? activeNavItemClasses : ''}`}>
+            <i className="fa-solid fa-puzzle-piece"></i>
+          </NavLink>
+
         </nav>
       </div>
 
@@ -77,6 +90,8 @@ const TopNavbar: React.FC = () => {
 const BottomNavbar: React.FC = () => {
   const { t } = useTranslation();
   const location = useLocation();
+  const { tabs: addonTabs } = useAddons();
+  const firstAddonTab = addonTabs[0];
 
   const navLinks = [
     { to: '/home', text: t('home'), icon: 'fa-solid fa-house' },
@@ -85,6 +100,9 @@ const BottomNavbar: React.FC = () => {
     { to: '/iptv', text: t('liveTv'), icon: 'fa-solid fa-broadcast-tower' },
     { to: '/ai-search', text: t('aiSearch'), icon: 'fa-solid fa-wand-magic-sparkles' },
     { to: '/favorites', text: t('myList'), icon: 'fa-solid fa-bookmark' },
+    firstAddonTab
+      ? { to: firstAddonTab.route, text: firstAddonTab.title, icon: firstAddonTab.icon }
+      : { to: '/addons', text: t('addons'), icon: 'fa-solid fa-puzzle-piece' },
   ];
 
   return (

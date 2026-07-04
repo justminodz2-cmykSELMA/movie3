@@ -2,6 +2,32 @@
 
 export const translations = {
   en: {
+    // Addons
+    'addons': 'Addons',
+    'latestAddons': 'Latest Addons',
+    'addonStudio': 'Addon Studio',
+    'addonStudioSubtitle': 'Extend CineStream with themes, providers and whole new tabs — powered by CineScript, our own addon language.',
+    'createAddon': 'Create Addon',
+    'myAddons': 'My Addons',
+    'noAddons': 'No addons installed yet. Create your first one!',
+    'installAddon': 'Install Addon',
+    'validate': 'Validate',
+    'addonValid': 'Addon is valid',
+    'addonInstalled': 'Addon installed',
+    'addonRemoved': 'Addon removed',
+    'enable': 'Enable',
+    'disable': 'Disable',
+    'open': 'Open',
+    'editCode': 'Edit Code',
+    'uninstall': 'Uninstall',
+    'showDocs': 'Language Docs',
+    'hideDocs': 'Hide Docs',
+    'templateNew': 'New Addon',
+    'addonNotFound': 'This addon page was not found or the addon is disabled.',
+    'addonEmptyPage': 'This addon page has no content yet.',
+    'poweredByAddon': 'Powered by {name} addon',
+    'addonSandboxNote': 'Addons run in a secure sandbox: no access to your account, the app core, or your device. Limited operations, network calls and runtime — a broken addon can never break CineStream.',
+
     // General
     'save': 'SAVE',
     'cancel': 'CANCEL',
@@ -291,6 +317,32 @@ export const translations = {
 
   },
   ar: {
+    // Addons
+    'addons': 'الإضافات',
+    'latestAddons': 'أحدث الإضافات',
+    'addonStudio': 'استوديو الإضافات',
+    'addonStudioSubtitle': 'وسّع CineStream بثيمات ومزودات وتبويبات جديدة كاملة — بلغة CineScript الخاصة بنا.',
+    'createAddon': 'إنشاء إضافة',
+    'myAddons': 'إضافاتي',
+    'noAddons': 'لا توجد إضافات مثبتة بعد. أنشئ أول إضافة لك!',
+    'installAddon': 'تثبيت الإضافة',
+    'validate': 'فحص الكود',
+    'addonValid': 'الإضافة صالحة',
+    'addonInstalled': 'تم تثبيت الإضافة',
+    'addonRemoved': 'تمت إزالة الإضافة',
+    'enable': 'تفعيل',
+    'disable': 'تعطيل',
+    'open': 'فتح',
+    'editCode': 'تعديل الكود',
+    'uninstall': 'إلغاء التثبيت',
+    'showDocs': 'مرجع اللغة',
+    'hideDocs': 'إخفاء المرجع',
+    'templateNew': 'إضافة جديدة',
+    'addonNotFound': 'صفحة الإضافة غير موجودة أو الإضافة معطلة.',
+    'addonEmptyPage': 'لا يوجد محتوى في هذه الصفحة بعد.',
+    'poweredByAddon': 'مقدمة من إضافة {name}',
+    'addonSandboxNote': 'تعمل الإضافات في بيئة معزولة آمنة: لا وصول لحسابك أو نواة التطبيق أو جهازك. عمليات واتصالات محدودة — الإضافة المعطوبة لا يمكنها أبداً إفساد CineStream.',
+
     // General
     'save': 'حفظ',
     'cancel': 'إلغاء',

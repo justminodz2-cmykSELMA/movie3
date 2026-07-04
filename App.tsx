@@ -20,6 +20,9 @@ import LoginPage from './pages/LoginPage';
 import QrApprovePage from './pages/QrApprovePage';
 import AdminPage from './pages/AdminPage';
 import { RequireAuth, GuestWatchGate } from './components/AuthGuard';
+import AddonsPage from './pages/AddonsPage';
+import AddonPage from './pages/AddonPage';
+import { AddonProvider } from './addons/AddonContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { PlayerProvider } from './contexts/PlayerContext';
@@ -202,6 +205,7 @@ const App: React.FC = () => {
   return ( 
     <LanguageProvider>
       <ProfileProvider>
+        <AddonProvider>
           {showTvCursor && <TVCursor position={cursorPosition} visible={true} clickEffect={clickEffect} />}
           <HashRouter>
             <PlayerProvider>
@@ -227,12 +231,16 @@ const App: React.FC = () => {
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/qr-approve" element={<QrApprovePage />} />
                 <Route path="/admin" element={<RequireAuth><AdminPage /></RequireAuth>} />
+                <Route path="/addons" element={<RequireAuth><AddonsPage /></RequireAuth>} />
+                <Route path="/addon/:addonId" element={<RequireAuth><AddonPage /></RequireAuth>} />
+                <Route path="/addon/:addonId/:pageId" element={<RequireAuth><AddonPage /></RequireAuth>} />
               </Routes>
               <PipPlayer />
               <GlobalModal />
             </PlayerProvider> 
           </HashRouter>
           <ToastContainer />
+        </AddonProvider>
       </ProfileProvider>
     </LanguageProvider>
   );
