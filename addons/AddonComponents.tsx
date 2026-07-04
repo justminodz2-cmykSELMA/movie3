@@ -53,11 +53,12 @@ const ADDON_ORB_STYLES = `
 .addon-orb:focus-visible,
 .addon-orb:focus {
   outline: none !important;
+  transform: scale(1) !important; /* TV remote: never scale on focus */
+  box-shadow: none !important;
 }
 .addon-orb:hover .addon-orb-inner,
 .addon-orb:focus-visible .addon-orb-inner,
 .addon-orb:focus .addon-orb-inner {
-  transform: scale(1.06);
   box-shadow: 0 0 25px var(--orb-glow, rgba(229, 9, 20, 0.55)),
               0 0 60px var(--orb-glow, rgba(229, 9, 20, 0.25));
 }

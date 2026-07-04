@@ -13,6 +13,26 @@ import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
 import { Movie } from '../types';
 
+// TV-remote focus: no scaling (like Top 10 / Live TV cards) — just the
+// same pulsing glow border the home-page rows use, following the card
+// radius (round on circles, rounded on posters/wide/square cards).
+const ADDON_CARD_STYLES = `
+.addon-item-card:focus-visible {
+  transform: scale(1) !important;
+  outline: none !important;
+  box-shadow: none !important;
+}
+.addon-item-card:hover .addon-card-frame {
+  transform: none;
+}
+.addon-item-card:focus-visible .addon-card-frame {
+  outline: 3px solid rgba(255, 255, 255, 0.9);
+  outline-offset: 3px;
+  animation: focus-pulse 2s linear infinite;
+  box-shadow: 0 0 24px rgba(255, 255, 255, 0.18), 0 4px 20px rgba(0,0,0,0.5) !important;
+}
+`;
+
 const AddonItemCard: React.FC<{
   item: AddonItem;
   shape: AddonRow['shape'];
@@ -52,10 +72,12 @@ const AddonItemCard: React.FC<{
   }, [item, navigate, setModalItem, setToast]);
 
   const sizeClasses = shape === 'wide'
-    ? 'w-64 md:w-72 aspect-video'
+    ? 'w-[24vw] min-w-[220px] max-w-[320px] aspect-video'
     : shape === 'circle'
       ? 'w-32 h-32 md:w-36 md:h-36 rounded-full'
-      : 'w-36 md:w-44 aspect-[2/3]';
+      : shape === 'square'
+        ? 'w-36 md:w-44 aspect-square'
+        : 'w-36 md:w-44 aspect-[2/3]';
 
   return (
     <div
@@ -63,13 +85,13 @@ const AddonItemCard: React.FC<{
       tabIndex={0}
       role="button"
       aria-label={item.title}
-      className="flex-shrink-0 cursor-pointer focusable group"
+      className="addon-item-card flex-shrink-0 cursor-pointer focusable group"
       onClick={handleActivate}
       onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleActivate(); } }}
       onFocus={() => { if (ref.current) onFocusCard(ref.current); }}
     >
       <div
-        className={`relative overflow-hidden bg-zinc-900 shadow-lg border border-zinc-800 transition-all duration-300 group-hover:scale-105 group-focus-within:scale-105 ${shape === 'circle' ? '' : 'rounded-xl'} ${sizeClasses}`}
+        className={`addon-card-frame relative overflow-hidden bg-zinc-900 shadow-lg border border-zinc-700/60 transition-shadow duration-300 ${shape === 'circle' ? 'rounded-full' : 'rounded-lg'} ${sizeClasses}`}
         style={{ boxShadow: `0 4px 20px rgba(0,0,0,0.5)` }}
       >
         {item.image && !imgError ? (
@@ -101,7 +123,7 @@ const AddonItemCard: React.FC<{
         </div>
       </div>
       {shape !== 'wide' && (
-        <p className="mt-2 text-xs text-zinc-300 font-medium truncate w-36 md:w-44 text-center">{item.title}</p>
+        <p className={`mt-2 text-xs text-zinc-300 font-medium truncate text-center ${shape === 'circle' ? 'w-32 md:w-36' : 'w-36 md:w-44'}`}>{item.title}</p>
       )}
     </div>
   );
@@ -132,6 +154,7 @@ const AddonContentRow: React.FC<{ row: AddonRow; color: string; zIndex: number }
       onFocus={() => setIsRowActive(true)}
       onBlur={(e) => !e.currentTarget.contains(e.relatedTarget as Node) && setIsRowActive(false)}
     >
+      <style>{ADDON_CARD_STYLES}</style>
       <h2 className={`px-6 mb-4 text-lg md:text-xl font-bold text-white transition-all duration-300 ease-out origin-left ${isRowActive ? 'scale-100' : 'scale-90 text-zinc-400'}`}>
         {row.title}
       </h2>
