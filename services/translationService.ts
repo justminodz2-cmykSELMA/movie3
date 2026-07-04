@@ -1,6 +1,6 @@
 
 
-import { SCRAPER_API_URL, BACKUP_SCRAPER_API_URL } from '../contexts/constants';
+import { SCRAPER_API_URL } from '../contexts/constants';
 
 /**
  * WARNING: This service uses an unofficial, public Google Translate API endpoint.
@@ -80,33 +80,16 @@ export const translateSrtViaGoogle = async (srtContent: string, targetLang: stri
             target_lang: targetLang
         };
         
-        let baseUrl = new URL(SCRAPER_API_URL).origin;
+        const baseUrl = new URL(SCRAPER_API_URL).origin;
         
-        let response;
-        try {
-            response = await fetch(`${baseUrl}/translate_srt`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'ngrok-skip-browser-warning': 'true'
-                },
-                body: JSON.stringify(requestBody)
-            });
-            if (!response.ok) {
-                throw new Error(`Main translation server failed with status ${response.status}`);
-            }
-        } catch (err) {
-            console.warn("Main translation server failed, trying backup...", err);
-            baseUrl = new URL(BACKUP_SCRAPER_API_URL).origin;
-            response = await fetch(`${baseUrl}/translate_srt`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'ngrok-skip-browser-warning': 'true'
-                },
-                body: JSON.stringify(requestBody)
-            });
-        }
+        const response = await fetch(`${baseUrl}/translate_srt`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'ngrok-skip-browser-warning': 'true'
+            },
+            body: JSON.stringify(requestBody)
+        });
 
         if (!response.ok) {
             console.error(`Translation service error: ${response.status}`);
