@@ -1,4 +1,10 @@
 {
+  "functions": {
+    "api/index.ts": {
+      "memory": 1024,
+      "maxDuration": 60
+    }
+  },
   "rewrites": [
     {
       "source": "/proxy-ugeen/:path*",

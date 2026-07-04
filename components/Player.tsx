@@ -1,6 +1,25 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import * as Hls from 'hls.js';
+
+// Tuned for smooth playback over serverless proxies (Vercel):
+// - big forward buffer rides through slow segment fetches
+// - next fragment is prefetched while the current one plays
+// - retries are quick and bounded so errors recover fast instead of stalling
+const HLS_TUNING: Partial<Hls.HlsConfig> = {
+    enableWorker: true,
+    maxBufferLength: 60,
+    maxMaxBufferLength: 120,
+    maxBufferSize: 90 * 1000 * 1000,
+    backBufferLength: 30,
+    startFragPrefetch: true,
+    abrEwmaDefaultEstimate: 1_600_000,
+    fragLoadingMaxRetry: 4,
+    fragLoadingRetryDelay: 500,
+    fragLoadingMaxRetryTimeout: 8000,
+    levelLoadingMaxRetry: 3,
+    manifestLoadingMaxRetry: 2,
+};
 import mpegts from 'mpegts.js';
 import { Movie, Episode, SubtitleTrack, SubtitleSettings, StreamLink } from '../types';
 import { useProfile } from '../contexts/ProfileContext';
@@ -877,7 +896,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             }
             mpegtsRef.current = null;
         }
-        const hls = new Hls.default();
+        const hls = new Hls.default(HLS_TUNING);
         hlsRef.current = hls;
         setHlsQualities([]);
         const savedTime = timeOnSwitchRef.current > 0 ? timeOnSwitchRef.current : (initialTime || 0);
@@ -941,7 +960,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                                 console.log("fatal network error encountered, try to recover using proxy");
                                 errorHandled = true;
                                 hls.destroy();
-                                const newHls = new Hls.default();
+                                const newHls = new Hls.default(HLS_TUNING);
                                 hlsRef.current = newHls;
                                 loadProxiedSource(activeStreamUrl, newHls);
                             }

@@ -629,7 +629,10 @@ app.use((req, res, next) => {
     "https://vidsrcme.ru",
   ];
 
-  const VS_CACHE_TTL_MS = 1000 * 60 * 8; // 8 minutes (tokens expire)
+  // Long TTL keeps segment URLs stable so Vercel's edge cache is reused across
+  // viewers and page reloads. Expired/IP-locked tokens are handled by the
+  // self-heal path, so a stale cache entry is never fatal.
+  const VS_CACHE_TTL_MS = 1000 * 60 * 120; // 2 hours
   const VS_STEP_TIMEOUT_MS = 6500;
 
   // Small in-memory cache (per warm instance) + Redis (cross-instance)
@@ -813,7 +816,7 @@ app.use((req, res, next) => {
 
     vsCacheSet(cacheKey, result, true);
     if (redis) {
-      try { await redis.set(cacheKey, JSON.stringify(result), { ex: 60 * 8 }); } catch {}
+      try { await redis.set(cacheKey, JSON.stringify(result), { ex: 60 * 120 }); } catch {}
     }
     return result;
   }
@@ -836,7 +839,9 @@ app.use((req, res, next) => {
       const r = await vsExtract(type, tmdb_id, season, episode);
       const proxiedHlsUrl = `/api/vs-proxy/playlist.m3u8?url=${encodeURIComponent(r.hlsUrl)}&x=${r.ctx}`;
       // Keep the response shape the frontend already understands.
-      res.set("Cache-Control", "public, max-age=0, s-maxage=240");
+      // Edge caches the extraction for an hour: repeat viewers of the same title
+      // get an instant answer without invoking the function at all.
+      res.set("Cache-Control", "public, max-age=0, s-maxage=3600, stale-while-revalidate=600");
       res.json({
         success: true,
         results: { [r.domain]: { hls_url: proxiedHlsUrl, subtitles: r.subtitles, error: null } },
@@ -948,7 +953,7 @@ app.use((req, res, next) => {
       res.set("Content-Type", "application/vnd.apple.mpegurl");
       res.set("Access-Control-Allow-Origin", "*");
       // VOD playlists rarely change: let the browser + edge cache them briefly
-      res.set("Cache-Control", "public, max-age=30, s-maxage=120");
+      res.set("Cache-Control", "public, max-age=60, s-maxage=3600, stale-while-revalidate=600");
       res.send(rewritten);
     } catch (err: any) {
       res.status(502).send("Proxy error: " + err.message);
