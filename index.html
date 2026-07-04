@@ -180,6 +180,72 @@
         animation: border-worm 2.5s linear infinite;
       }
 
+      /* ============================================
+         Addon Orbs — circular cards for the Latest Addons row.
+         Same rotating-worm + glow language as the rectangular cards,
+         but fully circular and tinted by each addon's accent color.
+         ============================================ */
+      .addon-orb-wrap {
+        --orb-accent: #ffffff;
+        transition: transform 0.25s ease-out;
+      }
+      .addon-orb-wrap:hover,
+      .addon-orb-wrap:focus-visible {
+        transform: scale(1.08);
+        z-index: 20;
+      }
+      .addon-orb-wrap:focus-visible {
+        outline: none !important;
+        box-shadow: none !important;
+      }
+      .addon-orb {
+        position: relative;
+        overflow: hidden;
+        padding: 3px;
+        border-radius: 9999px;
+        transition: box-shadow 0.3s ease-in-out;
+      }
+      .addon-orb::before {
+        content: '';
+        position: absolute;
+        top: -100%;
+        left: -100%;
+        width: 300%;
+        height: 300%;
+        background: conic-gradient(from 0deg, transparent 0%, transparent 30%, #3b82f6 45%, #ec4899 60%, #eab308 75%, #10b981 90%, #3b82f6 100%);
+        z-index: 0;
+        opacity: 0;
+        transition: opacity 0.3s ease-in-out;
+      }
+      .addon-orb-inner {
+        position: relative;
+        z-index: 1;
+        border-radius: 9999px;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+      }
+      .addon-orb-wrap:hover .addon-orb::before,
+      .addon-orb-wrap:focus-visible .addon-orb::before,
+      .addon-orb-wrap:focus-within .addon-orb::before {
+        opacity: 1;
+        animation: border-worm 2.5s linear infinite;
+      }
+      .addon-orb-wrap:hover .addon-orb,
+      .addon-orb-wrap:focus-visible .addon-orb,
+      .addon-orb-wrap:focus-within .addon-orb {
+        box-shadow: 0 0 22px 2px color-mix(in srgb, var(--orb-accent) 55%, transparent), 0 10px 30px rgba(0, 0, 0, 0.5);
+        animation: addon-orb-glow 2s ease-in-out infinite;
+      }
+      @keyframes addon-orb-glow {
+        0%, 100% {
+          box-shadow: 0 0 16px 1px color-mix(in srgb, var(--orb-accent) 40%, transparent), 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        50% {
+          box-shadow: 0 0 28px 4px color-mix(in srgb, var(--orb-accent) 65%, transparent), 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+      }
+
       .interactive-card {
         transition: transform 0.3s ease-out, box-shadow 0.3s ease-out !important;
         will-change: transform;

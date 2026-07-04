@@ -1654,6 +1654,10 @@ const HomePage: React.FC = () => {
                 category="your_next_watch"
                 onItemFocus={handleItemFocus}
               />
+              <AddonsRow
+                title={language === 'ar' ? 'أحدث الإضافات' : 'Latest Addons'}
+                zIndex={14}
+              />
               <LiveTvRow
                 title="Live TV"
                 zIndex={13}
