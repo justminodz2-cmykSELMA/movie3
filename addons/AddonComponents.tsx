@@ -135,7 +135,7 @@ export const AddonOrb: React.FC<{
 };
 
 export const LatestAddonsRow: React.FC<{ zIndex?: number }> = ({ zIndex }) => {
-  const { latestAddons, loading } = useAddons();
+  const { latestAddons, loading, openStudio } = useAddons();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const [isRowActive, setIsRowActive] = useState(false);
@@ -176,9 +176,10 @@ export const LatestAddonsRow: React.FC<{ zIndex?: number }> = ({ zIndex }) => {
     if (addon.enabled && firstPage) {
       navigate(`/addon/${addon.manifest.meta.id}/${firstPage.id}`);
     } else {
-      navigate('/addons', { state: { focusAddonId: addon.manifest.meta.id } });
+      // Managing addons happens in the personal PC Studio — show the tip.
+      openStudio();
     }
-  }, [navigate]);
+  }, [navigate, openStudio]);
 
   if (loading) return null;
 
@@ -197,7 +198,7 @@ export const LatestAddonsRow: React.FC<{ zIndex?: number }> = ({ zIndex }) => {
           {t('latestAddons')}
         </h2>
         <button
-          onClick={() => navigate('/addons')}
+          onClick={openStudio}
           className="text-xs text-zinc-400 hover:text-white focusable rounded-full px-3 py-1 border border-zinc-700 hover:border-zinc-400 transition-colors"
         >
           {t('addonStudio')} <i className="fa-solid fa-arrow-right text-[10px]" />
@@ -208,7 +209,7 @@ export const LatestAddonsRow: React.FC<{ zIndex?: number }> = ({ zIndex }) => {
           ref={rowContentRef}
           className="flex gap-5 px-6 py-4 transition-transform duration-300 ease-out"
         >
-          <AddonOrb isCreate onActivate={() => navigate('/addons')} onFocusCard={handleCardFocus} />
+          <AddonOrb isCreate onActivate={openStudio} onFocusCard={handleCardFocus} />
           {latestAddons.map((addon) => (
             <AddonOrb
               key={addon.manifest.meta.id}

@@ -290,6 +290,69 @@ export async function handleAuth(req: any, res: any) {
       return res.status(200).json({ ok: true });
     }
 
+    // ========================================================
+    // ADDON STUDIO — per-user personal addon manager (PC link).
+    // Strictly neutral scope: reads/writes ONLY addon data for
+    // the link's owner. Never touches accounts or sessions.
+    // ========================================================
+    const segs = route.split("/");
+    if (segs[0] === "studio") {
+      type StudioLink = { userId: string; profileId: string; profileName: string; createdAt: number };
+      const loadLinks = async (): Promise<Record<string, StudioLink>> => {
+        let links = await loadJson<Record<string, StudioLink>>("studio-links", {});
+        if (!links || typeof links !== "object" || Array.isArray(links)) links = {};
+        return links;
+      };
+      const addonsKey = (l: StudioLink) => `studio-addons-${l.userId}-${l.profileId}`;
+
+      if (segs[1] === "link" && req.method === "POST") {
+        const user = getUserByToken(req, users, sessions);
+        if (!user) return res.status(401).json({ error: "Not authenticated" });
+        const links = await loadLinks();
+        const profileId = String(body.profileId || "default");
+        const profileName = String(body.profileName || "");
+        let token = Object.keys(links).find(
+          (k) => links[k].userId === user.id && links[k].profileId === profileId,
+        );
+        if (!token) {
+          token = crypto.randomBytes(12).toString("hex");
+          links[token] = { userId: user.id, profileId, profileName, createdAt: Date.now() };
+          await saveJson("studio-links", links);
+        } else if (profileName && links[token].profileName !== profileName) {
+          links[token].profileName = profileName;
+          await saveJson("studio-links", links);
+        }
+        const store = await loadJson<{ rev: number; addons: any[] }>(addonsKey(links[token]), { rev: 0, addons: [] });
+        return res.status(200).json({ token, rev: store.rev || 0 });
+      }
+
+      const stoken = String(segs[1] || "");
+      const links = await loadLinks();
+      const link = links[stoken];
+      if (!link) return res.status(404).json({ error: "Invalid studio link" });
+
+      if (segs[2] === "addons" && req.method === "GET") {
+        const owner = users.find((u) => u.id === link.userId);
+        const store = await loadJson<{ rev: number; addons: any[] }>(addonsKey(link), { rev: 0, addons: [] });
+        return res.status(200).json({
+          rev: store.rev || 0,
+          addons: Array.isArray(store.addons) ? store.addons : [],
+          profileName: link.profileName || "",
+          username: owner ? owner.username : "",
+        });
+      }
+
+      if (segs[2] === "addons" && req.method === "POST") {
+        const addons = Array.isArray(body.addons) ? body.addons : null;
+        if (!addons) return res.status(400).json({ error: "addons must be an array" });
+        if (JSON.stringify(addons).length > 900_000) return res.status(413).json({ error: "Addon data too large" });
+        const store = await loadJson<{ rev: number; addons: any[] }>(addonsKey(link), { rev: 0, addons: [] });
+        const nextStore = { rev: (store.rev || 0) + 1, addons, updatedAt: Date.now() };
+        await saveJson(addonsKey(link), nextStore);
+        return res.status(200).json({ ok: true, rev: nextStore.rev });
+      }
+    }
+
     return res.status(404).json({ error: "Not found" });
   } catch (e) {
     console.error("[Auth] Unexpected error:", e);

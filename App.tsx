@@ -22,6 +22,7 @@ import AdminPage from './pages/AdminPage';
 import { RequireAuth, GuestWatchGate } from './components/AuthGuard';
 import AddonsPage from './pages/AddonsPage';
 import AddonPage from './pages/AddonPage';
+import StudioPage from './pages/StudioPage';
 import { AddonProvider } from './addons/AddonContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { LanguageProvider } from './contexts/LanguageContext';
@@ -234,6 +235,8 @@ const App: React.FC = () => {
                 <Route path="/addons" element={<RequireAuth><AddonsPage /></RequireAuth>} />
                 <Route path="/addon/:addonId" element={<RequireAuth><AddonPage /></RequireAuth>} />
                 <Route path="/addon/:addonId/:pageId" element={<RequireAuth><AddonPage /></RequireAuth>} />
+                {/* Personal PC Addon Studio — the private link token is the credential; addons-only scope */}
+                <Route path="/studio/:stoken" element={<StudioPage />} />
               </Routes>
               <PipPlayer />
               <GlobalModal />

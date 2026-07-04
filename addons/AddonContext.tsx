@@ -1,16 +1,22 @@
 // ============================================================
 // AddonProvider — installs, stores, runs and exposes addons.
-// Persisted in localStorage; manifests are refreshed in the
-// background on startup so dynamic rows stay up to date.
+// Persisted in localStorage AND synced (addons only) with the
+// user's personal Addon Studio link, so edits made on a PC
+// appear on the TV home screen automatically.
 // ============================================================
 
 import React, {
-  createContext, useContext, useState, useEffect, useCallback, useMemo, ReactNode,
+  createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, ReactNode,
 } from 'react';
 import { InstalledAddon, AddonManifest, AddonPageDef } from './types';
 import { buildAddonManifest } from './runtime';
 import { BUILTIN_ADDON_SOURCES } from './builtins';
 import { useProfile } from '../contexts/ProfileContext';
+import { getToken } from '../services/authService';
+import {
+  createStudioLink, fetchStudioAddons, saveStudioAddons, buildStudioUrl,
+} from '../services/studioService';
+import StudioTipModal from './StudioTipModal';
 
 export interface AddonTab {
   addonId: string;
@@ -30,6 +36,11 @@ interface AddonContextType {
   getPage: (addonId: string, pageId?: string) => { addon: InstalledAddon; page: AddonPageDef } | null;
   tabs: AddonTab[];
   latestAddons: InstalledAddon[];
+  /** Personal Addon Studio URL for this user/profile (PC management page). */
+  studioUrl: string | null;
+  /** Opens the neutral "manage addons on your PC" tip modal. */
+  openStudio: () => void;
+  closeStudio: () => void;
 }
 
 const AddonContext = createContext<AddonContextType | undefined>(undefined);
@@ -83,11 +94,21 @@ function applyTheme(theme: Record<string, string> | null) {
 export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [addons, setAddons] = useState<InstalledAddon[]>([]);
   const [loading, setLoading] = useState(true);
+  const [studioToken, setStudioToken] = useState<string | null>(null);
+  const [studioOpen, setStudioOpen] = useState(false);
   const { activeProfile } = useProfile();
 
   // Addons are per-profile: each account/profile has its own installed
   // addons and its own theme; changes never leak to other profiles.
   const storageKey = `cineStreamAddons_v1_${activeProfile?.id || 'default'}`;
+  const revKey = `${storageKey}_rev`;
+
+  // Refs so async sync code never works with stale closures.
+  const addonsRef = useRef<InstalledAddon[]>([]);
+  const studioTokenRef = useRef<string | null>(null);
+  const serverRevRef = useRef(0);
+  useEffect(() => { addonsRef.current = addons; }, [addons]);
+  useEffect(() => { studioTokenRef.current = studioToken; }, [studioToken]);
 
   // Load per-profile addons (re-runs when the active profile changes),
   // or seed the built-in gallery on this profile's first run.
@@ -142,45 +163,122 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     applyTheme(themeAddon ? themeAddon.manifest.theme : null);
   }, [addons]);
 
+  // ---- Studio link + sync (addons only, best effort, never blocks the app) ----
+
+  // Fetch (or create) this user/profile's stable personal Studio link.
+  useEffect(() => {
+    let cancelled = false;
+    setStudioToken(null);
+    serverRevRef.current = parseInt(localStorage.getItem(revKey) || '0', 10) || 0;
+    if (!getToken() || !activeProfile) return;
+    (async () => {
+      try {
+        const { token } = await createStudioLink(
+          String(activeProfile.id),
+          String((activeProfile as any).name || ''),
+        );
+        if (!cancelled) setStudioToken(token);
+      } catch {
+        // Studio sync unavailable — the app keeps working locally as before.
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [storageKey]);
+
+  const applyServerAddons = useCallback((remote: InstalledAddon[], rev: number) => {
+    serverRevRef.current = rev;
+    try { localStorage.setItem(revKey, String(rev)); } catch { /* ignore */ }
+    addonsRef.current = remote;
+    setAddons(remote);
+    persist(storageKey, remote);
+  }, [storageKey, revKey]);
+
+  const pushAddons = useCallback(async (next: InstalledAddon[]) => {
+    const token = studioTokenRef.current;
+    if (!token) return;
+    try {
+      const rev = await saveStudioAddons(token, next);
+      serverRevRef.current = rev;
+      try { localStorage.setItem(revKey, String(rev)); } catch { /* ignore */ }
+    } catch {
+      // Offline / server hiccup: local copy stays authoritative on this device.
+    }
+  }, [revKey]);
+
+  // Pull remote changes: on link ready, on tab focus, and every 15s —
+  // so edits made in the PC Studio appear on the TV automatically.
+  useEffect(() => {
+    if (!studioToken) return;
+    let stopped = false;
+    const sync = async (initial = false) => {
+      try {
+        const data = await fetchStudioAddons(studioToken);
+        if (stopped) return;
+        if (data.rev > serverRevRef.current && Array.isArray(data.addons)) {
+          applyServerAddons(data.addons, data.rev);
+        } else if (initial && (data.rev || 0) === 0 && addonsRef.current.length > 0) {
+          // First time this profile syncs: seed the Studio with this device's addons.
+          await pushAddons(addonsRef.current);
+        }
+      } catch {
+        // best effort only
+      }
+    };
+    sync(true);
+    const interval = window.setInterval(() => sync(), 15000);
+    const onVisible = () => { if (document.visibilityState === 'visible') sync(); };
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('focus', onVisible);
+    return () => {
+      stopped = true;
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', onVisible);
+      window.removeEventListener('focus', onVisible);
+    };
+  }, [studioToken, applyServerAddons, pushAddons]);
+
+  // ---- Mutations (persist locally + mirror to the Studio) ----
+
   const installAddon = useCallback(async (source: string): Promise<InstalledAddon> => {
     const { manifest } = await buildAddonManifest(source);
+    const prev = addonsRef.current;
+    const existing = prev.find(a => a.manifest.meta.id === manifest.meta.id);
     const installed: InstalledAddon = {
       source,
       manifest,
       enabled: true,
-      installedAt: Date.now(),
+      builtin: existing?.builtin,
+      installedAt: existing?.installedAt || Date.now(),
       updatedAt: Date.now(),
     };
-    setAddons(prev => {
-      const existing = prev.find(a => a.manifest.meta.id === manifest.meta.id);
-      const next = existing
-        ? prev.map(a => a.manifest.meta.id === manifest.meta.id
-            ? { ...installed, builtin: a.builtin, installedAt: a.installedAt }
-            : a)
-        : [...prev, installed];
-      persist(storageKey, next);
-      return next;
-    });
+    const next = existing
+      ? prev.map(a => (a.manifest.meta.id === manifest.meta.id ? installed : a))
+      : [...prev, installed];
+    addonsRef.current = next;
+    setAddons(next);
+    persist(storageKey, next);
+    pushAddons(next);
     return installed;
-  }, [storageKey]);
+  }, [storageKey, pushAddons]);
 
   const uninstallAddon = useCallback((id: string) => {
-    setAddons(prev => {
-      const next = prev.filter(a => a.manifest.meta.id !== id);
-      persist(storageKey, next);
-      return next;
-    });
-  }, [storageKey]);
+    const next = addonsRef.current.filter(a => a.manifest.meta.id !== id);
+    addonsRef.current = next;
+    setAddons(next);
+    persist(storageKey, next);
+    pushAddons(next);
+  }, [storageKey, pushAddons]);
 
   const toggleAddon = useCallback((id: string) => {
-    setAddons(prev => {
-      const next = prev.map(a => a.manifest.meta.id === id
-        ? { ...a, enabled: !a.enabled, updatedAt: Date.now() }
-        : a);
-      persist(storageKey, next);
-      return next;
-    });
-  }, [storageKey]);
+    const next = addonsRef.current.map(a => a.manifest.meta.id === id
+      ? { ...a, enabled: !a.enabled, updatedAt: Date.now() }
+      : a);
+    addonsRef.current = next;
+    setAddons(next);
+    persist(storageKey, next);
+    pushAddons(next);
+  }, [storageKey, pushAddons]);
 
   const getAddon = useCallback(
     (id: string) => addons.find(a => a.manifest.meta.id === id),
@@ -220,11 +318,22 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
     [addons],
   );
 
+  const studioUrl = useMemo(() => (studioToken ? buildStudioUrl(studioToken) : null), [studioToken]);
+  const openStudio = useCallback(() => setStudioOpen(true), []);
+  const closeStudio = useCallback(() => setStudioOpen(false), []);
+
   const value = useMemo(() => ({
     addons, loading, installAddon, uninstallAddon, toggleAddon, getAddon, getPage, tabs, latestAddons,
-  }), [addons, loading, installAddon, uninstallAddon, toggleAddon, getAddon, getPage, tabs, latestAddons]);
+    studioUrl, openStudio, closeStudio,
+  }), [addons, loading, installAddon, uninstallAddon, toggleAddon, getAddon, getPage, tabs, latestAddons,
+    studioUrl, openStudio, closeStudio]);
 
-  return <AddonContext.Provider value={value}>{children}</AddonContext.Provider>;
+  return (
+    <AddonContext.Provider value={value}>
+      {children}
+      {studioOpen && <StudioTipModal url={studioUrl} onClose={closeStudio} />}
+    </AddonContext.Provider>
+  );
 };
 
 export const useAddons = (): AddonContextType => {

@@ -19,6 +19,7 @@ import {
 } from "../contexts/constants";
 import { fetchRandomCategoryChannels, IptvChannel, getProxiedStreamUrl } from "../services/iptvService";
 import { LatestAddonsRow } from "../addons/AddonComponents";
+import { useAddons } from "../addons/AddonContext";
 
 const AmbientBackground: React.FC<{ imageUrl: string | null }> = ({
   imageUrl,
@@ -1165,9 +1166,25 @@ const HomePage: React.FC = () => {
   const { isKidsMode, activeProfile, setModalItem, getScreenSpecificData } =
     useProfile();
   const { t, language } = useTranslation();
+  const { openStudio } = useAddons();
   const navigate = useNavigate();
 
   const focusTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // One-time neutral tip per profile: manage/add addons from the personal
+  // PC Studio link (shown as a top modal, never as a header entry).
+  useEffect(() => {
+    try {
+      const tipKey = `cineStudioTipSeen_v1_${activeProfile?.id || "default"}`;
+      if (localStorage.getItem(tipKey)) return;
+      const timer = setTimeout(() => {
+        try { localStorage.setItem(tipKey, "1"); } catch { /* ignore */ }
+        openStudio();
+      }, 3000);
+      return () => clearTimeout(timer);
+    } catch { /* ignore */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeProfile?.id]);
 
   useEffect(() => {
     return () => {

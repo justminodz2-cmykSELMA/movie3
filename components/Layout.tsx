@@ -61,10 +61,8 @@ const TopNavbar: React.FC = () => {
             </NavLink>
           ))}
 
-          <NavLink to="/addons" aria-label={t('addons')} title={t('addons')} className={({isActive}) => `${navItemClasses} ${isActive ? activeNavItemClasses : ''}`}>
-            <i className="fa-solid fa-puzzle-piece"></i>
-          </NavLink>
-
+          {/* Addon manager intentionally not shown in the header — users are
+              guided to their personal PC Studio via a neutral tip modal. */}
         </nav>
       </div>
 

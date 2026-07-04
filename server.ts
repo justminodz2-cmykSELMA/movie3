@@ -29,7 +29,7 @@ app.use((req, res, next) => {
   // ==========================================================
   // AUTH BACKEND: accounts, sessions, QR login (TV), admin
   // ==========================================================
-  app.use(express.json());
+  app.use(express.json({ limit: "1mb" })); // addon sources + manifests can exceed the 100kb default
 
   const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL || "";
   const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN || "";
@@ -345,6 +345,83 @@ app.use((req, res, next) => {
     (req as any).adminUser = user;
     next();
   };
+
+  // ==========================================================
+  // ADDON STUDIO — per-user personal addon manager (PC link).
+  // Strictly neutral scope: these routes read/write ONLY addon
+  // data for the link's owner. They never touch accounts,
+  // sessions, roles or any other user data.
+  // ==========================================================
+  type StudioLink = { userId: string; profileId: string; profileName: string; createdAt: number };
+  let studioLinks: Record<string, StudioLink> = {};
+  let studioLinksLoaded = false;
+  const loadStudioLinks = async (): Promise<Record<string, StudioLink>> => {
+    if (!studioLinksLoaded) {
+      studioLinks = await readJson<Record<string, StudioLink>>("studio-links", {});
+      if (!studioLinks || typeof studioLinks !== "object" || Array.isArray(studioLinks)) studioLinks = {};
+      studioLinksLoaded = true;
+    }
+    return studioLinks;
+  };
+  const saveStudioLinks = () => writeJson("studio-links", studioLinks);
+  const studioAddonsKey = (l: StudioLink) => `studio-addons-${l.userId}-${l.profileId}`;
+
+  // Create (or return) the user's stable personal Studio link token.
+  app.post("/api/auth/studio/link", async (req, res, next) => {
+    try {
+      const user = getUserByToken(req);
+      if (!user) return res.status(401).json({ error: "Not authenticated" });
+      await loadStudioLinks();
+      const profileId = String(req.body?.profileId || "default");
+      const profileName = String(req.body?.profileName || "");
+      let token = Object.keys(studioLinks).find(
+        (k) => studioLinks[k].userId === user.id && studioLinks[k].profileId === profileId,
+      );
+      if (!token) {
+        token = crypto.randomBytes(12).toString("hex");
+        studioLinks[token] = { userId: user.id, profileId, profileName, createdAt: Date.now() };
+        await saveStudioLinks();
+      } else if (profileName && studioLinks[token].profileName !== profileName) {
+        studioLinks[token].profileName = profileName;
+        await saveStudioLinks();
+      }
+      const store = await readJson<{ rev: number; addons: any[] }>(studioAddonsKey(studioLinks[token]), { rev: 0, addons: [] });
+      res.json({ token, rev: store.rev || 0 });
+    } catch (e) { next(e); }
+  });
+
+  // Read the addons behind a Studio link (token is the credential).
+  app.get("/api/auth/studio/:stoken/addons", async (req, res, next) => {
+    try {
+      await loadStudioLinks();
+      const link = studioLinks[String(req.params.stoken || "")];
+      if (!link) return res.status(404).json({ error: "Invalid studio link" });
+      const owner = users.find((u) => u.id === link.userId);
+      const store = await readJson<{ rev: number; addons: any[] }>(studioAddonsKey(link), { rev: 0, addons: [] });
+      res.json({
+        rev: store.rev || 0,
+        addons: Array.isArray(store.addons) ? store.addons : [],
+        profileName: link.profileName || "",
+        username: owner ? owner.username : "",
+      });
+    } catch (e) { next(e); }
+  });
+
+  // Save the addons behind a Studio link. Addon data only.
+  app.post("/api/auth/studio/:stoken/addons", async (req, res, next) => {
+    try {
+      await loadStudioLinks();
+      const link = studioLinks[String(req.params.stoken || "")];
+      if (!link) return res.status(404).json({ error: "Invalid studio link" });
+      const addons = Array.isArray(req.body?.addons) ? req.body.addons : null;
+      if (!addons) return res.status(400).json({ error: "addons must be an array" });
+      if (JSON.stringify(addons).length > 900_000) return res.status(413).json({ error: "Addon data too large" });
+      const store = await readJson<{ rev: number; addons: any[] }>(studioAddonsKey(link), { rev: 0, addons: [] });
+      const nextStore = { rev: (store.rev || 0) + 1, addons, updatedAt: Date.now() };
+      await writeJson(studioAddonsKey(link), nextStore);
+      res.json({ ok: true, rev: nextStore.rev });
+    } catch (e) { next(e); }
+  });
 
   // --- Admin: list users + stats ---
   app.get("/api/admin/users", requireAdmin, (req, res) => {

@@ -27,6 +27,21 @@ export const translations = {
     'addonEmptyPage': 'This addon page has no content yet.',
     'poweredByAddon': 'Powered by {name} addon',
     'addonSandboxNote': 'Addons run in a secure sandbox: no access to your account, the app core, or your device. Limited operations, network calls and runtime — a broken addon can never break CineStream.',
+    'rows': 'rows',
+    'titles': 'titles',
+
+    // Addon Studio (personal PC link)
+    'studioTipTitle': 'Manage your addons',
+    'studioTipBody': 'To add or manage addons, open your personal Addon Studio link on your PC. Anything you change there appears on your TV home screen automatically — and it only ever touches your addons, nothing else.',
+    'studioTipScan': 'Open the link on your PC, or scan the QR code with your phone.',
+    'studioTipPreparing': 'Preparing your personal link…',
+    'studioYourLink': 'Your personal link',
+    'gotIt': 'Got it',
+    'studioLiveBadge': 'Live — synced with your TV',
+    'studioSyncNote': 'This is your personal Addon Studio. It manages only your addons: install, edit, enable or remove them here, and your TV home screen updates automatically within seconds.',
+    'studioLinkInvalid': 'This Studio link is invalid or has expired. Open the Addon Studio tip on your TV to get your personal link.',
+    'studioSaved': 'Saved — live on your TV',
+    'studioForProfile': 'Addons for',
 
     // General
     'save': 'SAVE',
@@ -342,6 +357,21 @@ export const translations = {
     'addonEmptyPage': 'لا يوجد محتوى في هذه الصفحة بعد.',
     'poweredByAddon': 'مقدمة من إضافة {name}',
     'addonSandboxNote': 'تعمل الإضافات في بيئة معزولة آمنة: لا وصول لحسابك أو نواة التطبيق أو جهازك. عمليات واتصالات محدودة — الإضافة المعطوبة لا يمكنها أبداً إفساد CineStream.',
+    'rows': 'أسطر',
+    'titles': 'عنصر',
+
+    // Addon Studio (personal PC link)
+    'studioTipTitle': 'إدارة إضافاتك',
+    'studioTipBody': 'لإضافة الإضافات أو إدارتها، افتح رابط استوديو الإضافات الخاص بك على جهاز الكمبيوتر. أي تعديل هناك يظهر على شاشة التلفاز الرئيسية تلقائياً — ولا يمسّ سوى إضافاتك فقط، لا شيء آخر.',
+    'studioTipScan': 'افتح الرابط على جهاز الكمبيوتر، أو امسح رمز QR بهاتفك.',
+    'studioTipPreparing': 'جارٍ تجهيز رابطك الخاص…',
+    'studioYourLink': 'رابطك الخاص',
+    'gotIt': 'حسناً',
+    'studioLiveBadge': 'مباشر — متزامن مع تلفازك',
+    'studioSyncNote': 'هذا استوديو الإضافات الخاص بك. يدير إضافاتك فقط: ثبّت وعدّل وفعّل أو احذف هنا، وستتحدّث شاشة التلفاز الرئيسية تلقائياً خلال ثوانٍ.',
+    'studioLinkInvalid': 'رابط الاستوديو غير صالح أو منتهي الصلاحية. افتح تلميح استوديو الإضافات على التلفاز للحصول على رابطك الخاص.',
+    'studioSaved': 'تم الحفظ — مباشر على تلفازك',
+    'studioForProfile': 'إضافات',
 
     // General
     'save': 'حفظ',
