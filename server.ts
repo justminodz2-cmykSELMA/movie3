@@ -627,6 +627,8 @@ app.use((req, res, next) => {
     "https://vsembed.ru",
     "https://vsembed.su",
     "https://vidsrcme.ru",
+    "https://vidsrc.pm",
+    "https://vidsrc.in",
   ];
 
   // Long TTL keeps segment URLs stable so Vercel's edge cache is reused across
@@ -647,10 +649,27 @@ app.use((req, res, next) => {
     vsCache.set(key, { timestamp: Date.now(), response, local });
   };
 
+  // Full browser header spoofing — Cloudflare rejects headerless fetches with 521
+  const VS_BROWSER_HEADERS: Record<string, string> = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9,ar;q=0.8",
+    "Cache-Control": "max-age=0",
+    "Sec-Ch-Ua": '"Chromium";v="124", "Google Chrome";v="124", "Not-A.Brand";v="99"',
+    "Sec-Ch-Ua-Mobile": "?0",
+    "Sec-Ch-Ua-Platform": '"Windows"',
+    "Sec-Fetch-Dest": "document",
+    "Sec-Fetch-Mode": "navigate",
+    "Sec-Fetch-Site": "cross-site",
+    "Sec-Fetch-User": "?1",
+    "Upgrade-Insecure-Requests": "1",
+  };
+
   const vsFetch = (url: string, init: any = {}, timeoutMs = VS_STEP_TIMEOUT_MS) =>
     fetch(url, {
       redirect: "follow",
       ...init,
+      headers: { ...VS_BROWSER_HEADERS, ...(init.headers || {}) },
       signal: AbortSignal.timeout(timeoutMs),
     });
 
