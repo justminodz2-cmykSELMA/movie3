@@ -24,6 +24,7 @@ const HLS_TUNING: Partial<Hls.HlsConfig> = {
 };
 import mpegts from 'mpegts.js';
 import { Movie, Episode, SubtitleTrack, SubtitleSettings, StreamLink } from '../types';
+import VideoEnhancer4K from './videoEnhancer';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
 import { fetchStreamUrl, fetchFromTMDB, analyzeSubtitlesForSkips, streamDubbing, DubbingBatch } from '../services/apiService';
@@ -389,7 +390,7 @@ const SettingsPanel: React.FC<{
                 <span className="text-zinc-500 text-xs uppercase tracking-wider font-bold">Coming Soon</span>
             </button>
             <button onClick={() => onToggleEnhancement()} className="player-panel-button justify-between">
-                <span>Video Enhancement (AI)</span>
+                <span>4K Video Enhancer (AI)</span>
                 <span className={`text-zinc-400 ${isEnhancementActive ? 'text-green-500 font-bold' : ''}`}>{isEnhancementActive ? 'On' : 'Off'}</span>
             </button>
             <button ref={el => {mainPanelButtonsRef.current['speed'] = el}} onClick={() => setView('speed')} className="player-panel-button justify-between">
@@ -730,6 +731,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const hlsRef = useRef<Hls.default | null>(null);
     const mpegtsRef = useRef<any>(null);
     const [isEnhancementActive, setIsEnhancementActive] = useState(false);
+    const [enhancerCssFallback, setEnhancerCssFallback] = useState(false);
     const enhancementCanvasRef = useRef<HTMLCanvasElement>(null);
     const enhancementAnimFrame = useRef<number>(0);
 
@@ -811,56 +813,31 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     }, [playbackRate]);
 
     useEffect(() => {
-        if (!isEnhancementActive || !videoRef.current || !enhancementCanvasRef.current) {
-            if (enhancementCanvasRef.current) {
-                const ctx = enhancementCanvasRef.current.getContext('2d');
-                ctx?.clearRect(0, 0, enhancementCanvasRef.current.width, enhancementCanvasRef.current.height);
-            }
+        if (!isEnhancementActive) {
+            setEnhancerCssFallback(false);
             return;
         }
-
         const video = videoRef.current;
         const canvas = enhancementCanvasRef.current;
-        const ctx = canvas.getContext('2d', { willReadFrequently: true });
-        if (!ctx) return;
+        if (!video || !canvas) return;
 
-        let active = true;
-
-        if ('requestVideoFrameCallback' in HTMLVideoElement.prototype) {
-            const drawFrame = (now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => {
-                if (!active) return;
-                
-                if (canvas.width !== metadata.width || canvas.height !== metadata.height) {
-                    canvas.width = metadata.width;
-                    canvas.height = metadata.height;
-                }
-                
-                // Real-time AI Upscaling / Sharpening via filter
-                ctx.filter = 'contrast(1.1) saturate(1.15) brightness(1.05) drop-shadow(0px 0px 1px rgba(255,255,255,0.05))';
-                ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                
-                (video as any).requestVideoFrameCallback(drawFrame);
-            };
-            (video as any).requestVideoFrameCallback(drawFrame);
-        } else {
-            const drawFrame = () => {
-                if (!active) return;
-                if (video.videoWidth && video.videoHeight) {
-                     if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-                        canvas.width = video.videoWidth;
-                        canvas.height = video.videoHeight;
-                    }
-                    ctx.filter = 'contrast(1.1) saturate(1.15) brightness(1.05)';
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                }
-                enhancementAnimFrame.current = requestAnimationFrame(drawFrame);
-            };
-            drawFrame();
+        let enhancer: VideoEnhancer4K | null = null;
+        try {
+            // True 4K enhancement: GPU bicubic upscale + FSR-style RCAS sharpening.
+            enhancer = new VideoEnhancer4K(video, canvas, () => {
+                // Device/stream can't run the GPU path — degrade to a CSS-filter
+                // enhancement on the video element itself (zero overhead).
+                setEnhancerCssFallback(true);
+            });
+            enhancer.start();
+            setEnhancerCssFallback(false);
+        } catch (e) {
+            enhancer = null;
+            setEnhancerCssFallback(true);
         }
 
         return () => {
-            active = false;
-            cancelAnimationFrame(enhancementAnimFrame.current);
+            enhancer?.dispose();
         };
     }, [isEnhancementActive, activeStreamUrl]);
 
@@ -1983,8 +1960,8 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             <div inert={isChannelListVisible ? true : undefined} className="absolute inset-0 w-full h-full bg-black">
                 <video 
                     ref={videoRef} 
-                    className={`w-full h-full object-contain bg-black ${isEnhancementActive ? 'opacity-0' : ''}`} 
-                    style={{ background: 'black' }}
+                    className={`w-full h-full object-contain bg-black ${isEnhancementActive && !enhancerCssFallback ? 'opacity-0' : ''}`} 
+                    style={{ background: 'black', filter: isEnhancementActive && enhancerCssFallback ? 'contrast(1.08) saturate(1.12) brightness(1.03)' : undefined }}
                     playsInline 
                     autoPlay 
                     preload="metadata"
@@ -1997,7 +1974,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 
                 <canvas 
                     ref={enhancementCanvasRef} 
-                    className={`absolute inset-0 w-full h-full object-contain pointer-events-none transition-opacity duration-300 ${isEnhancementActive ? 'opacity-100' : 'opacity-0'}`} 
+                    className={`absolute inset-0 w-full h-full object-contain pointer-events-none transition-opacity duration-300 ${isEnhancementActive && !enhancerCssFallback ? 'opacity-100' : 'opacity-0'}`} 
                 />
                 
                 <div 
