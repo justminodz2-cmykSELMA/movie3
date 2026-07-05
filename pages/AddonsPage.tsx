@@ -12,7 +12,8 @@ import { InstalledAddon } from '../addons/types';
 import { buildAddonManifest } from '../addons/runtime';
 import {
   NEW_ADDON_TEMPLATE, BOOKS_ADDON_SOURCE, AURORA_THEME_SOURCE,
-  ANIME_HUB_SOURCE, PROVIDER_EXAMPLE_SOURCE, CINESCRIPT_DOCS,
+  ANIME_HUB_SOURCE, PROVIDER_EXAMPLE_SOURCE, AI_SUBTITLES_SOURCE,
+  INTRO_SKIP_AI_SOURCE, CINESCRIPT_DOCS,
 } from '../addons/builtins';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
@@ -21,6 +22,7 @@ const TYPE_LABEL: Record<string, { label: string; icon: string }> = {
   theme: { label: 'Theme', icon: 'fa-solid fa-palette' },
   page: { label: 'Page / Tab', icon: 'fa-solid fa-table-columns' },
   provider: { label: 'Provider', icon: 'fa-solid fa-server' },
+  player: { label: 'Player', icon: 'fa-solid fa-closed-captioning' },
   mixed: { label: 'Addon', icon: 'fa-solid fa-puzzle-piece' },
 };
 
@@ -99,6 +101,8 @@ const AddonsPage: React.FC = () => {
     { name: 'Theme', icon: 'fa-solid fa-palette', source: AURORA_THEME_SOURCE },
     { name: 'Anime Tab', icon: 'fa-solid fa-dragon', source: ANIME_HUB_SOURCE },
     { name: 'Provider', icon: 'fa-solid fa-server', source: PROVIDER_EXAMPLE_SOURCE },
+    { name: 'AI Subtitles', icon: 'fa-solid fa-wand-magic-sparkles', source: AI_SUBTITLES_SOURCE },
+    { name: 'Intro Skip', icon: 'fa-solid fa-forward-fast', source: INTRO_SKIP_AI_SOURCE },
   ]), [t]);
 
   const handleValidate = useCallback(async (install: boolean) => {

@@ -9,7 +9,8 @@
 import { runScript, CineScriptError } from './cinescript';
 import {
   AddonManifest, AddonMeta, AddonItem, AddonRow, AddonPageDef,
-  AddonProviderDef, THEME_ALLOWED_KEYS, AddonType,
+  AddonProviderDef, AddonSubtitleSourceDef, AddonPlayerFlags,
+  AddonAiTranslateLang, THEME_ALLOWED_KEYS, AddonType,
 } from './types';
 import { TMDB_API_KEY, TMDB_BASE_URL, IMAGE_BASE_URL } from '../contexts/constants';
 
@@ -75,6 +76,8 @@ export async function buildAddonManifest(source: string): Promise<RunResult> {
   let theme: Record<string, string> | null = null;
   const pages: AddonPageDef[] = [];
   const providers: AddonProviderDef[] = [];
+  const subtitleSources: AddonSubtitleSourceDef[] = [];
+  let playerFlags: AddonPlayerFlags | null = null;
   const logs: string[] = [];
   let httpCalls = 0;
 
@@ -122,7 +125,7 @@ export async function buildAddonManifest(source: string): Promise<RunResult> {
     meta: (m: any) => {
       if (!m || typeof m !== 'object') throw new Error('meta() expects an object');
       if (!m.id || !m.name) throw new Error('meta() requires "id" and "name"');
-      const type: AddonType = (['theme', 'page', 'provider', 'mixed'].includes(m.type) ? m.type : 'mixed') as AddonType;
+      const type: AddonType = (['theme', 'page', 'provider', 'player', 'mixed'].includes(m.type) ? m.type : 'mixed') as AddonType;
       meta = {
         id: slug(m.id),
         name: cleanString(m.name, 60),
@@ -133,6 +136,41 @@ export async function buildAddonManifest(source: string): Promise<RunResult> {
         color: /^#[0-9a-fA-F]{3,8}$/.test(String(m.color || '')) ? String(m.color) : '#e50914',
         type,
       };
+    },
+    subtitles: (s: any) => {
+      if (!s || typeof s !== 'object' || !s.id || !s.name) throw new Error('subtitles() requires "id" and "name"');
+      if (subtitleSources.length >= 4) throw new Error('Max 4 subtitle sources per addon');
+      const def: AddonSubtitleSourceDef = {
+        id: slug(s.id),
+        name: cleanString(s.name, 60),
+      };
+      if (s.movieUrl && isSafeUrl(String(s.movieUrl).replace(/\{[a-z]+\}/g, '1'))) def.movieUrl = cleanString(s.movieUrl, 500);
+      if (s.tvUrl && isSafeUrl(String(s.tvUrl).replace(/\{[a-z]+\}/g, '1'))) def.tvUrl = cleanString(s.tvUrl, 500);
+      if (!def.movieUrl && !def.tvUrl) throw new Error('subtitles() needs a valid https "movieUrl" or "tvUrl" template');
+      if (s.language && /^[a-zA-Z-]{2,8}$/.test(String(s.language))) def.language = String(s.language).toLowerCase();
+      if (s.maxTracks) def.maxTracks = Math.max(1, Math.min(12, Math.floor(Number(s.maxTracks) || 6)));
+      subtitleSources.push(def);
+      return { id: def.id };
+    },
+    player: (p: any) => {
+      if (!p || typeof p !== 'object') throw new Error('player() expects an object, e.g. player({ autoSkipIntro: true })');
+      const flags: AddonPlayerFlags = { ...(playerFlags || {}) };
+      if ('autoSkipIntro' in p) flags.autoSkipIntro = !!p.autoSkipIntro;
+      if ('autoSkipOutro' in p) flags.autoSkipOutro = !!p.autoSkipOutro;
+      if (Array.isArray(p.aiTranslate)) {
+        const langs: AddonAiTranslateLang[] = [];
+        for (const l of p.aiTranslate.slice(0, 8)) {
+          if (!l || typeof l !== 'object' || !l.code || !l.label) continue;
+          const code = String(l.code).toLowerCase().replace(/[^a-z-]/g, '').slice(0, 8);
+          if (!code) continue;
+          langs.push({ code, label: cleanString(l.label, 40) });
+        }
+        if (langs.length) flags.aiTranslate = langs;
+      }
+      if (!('autoSkipIntro' in flags) && !('autoSkipOutro' in flags) && !flags.aiTranslate) {
+        throw new Error('player() accepts: autoSkipIntro, autoSkipOutro, aiTranslate: [{ code, label }]');
+      }
+      playerFlags = flags;
     },
     theme: (vars: any) => {
       if (!vars || typeof vars !== 'object') throw new Error('theme() expects an object');
@@ -248,6 +286,6 @@ export async function buildAddonManifest(source: string): Promise<RunResult> {
 
   if (!meta) throw new CineScriptError('Addon must call meta({ id, name, ... }) to describe itself', 0);
 
-  const manifest: AddonManifest = { meta, theme, pages, providers };
+  const manifest: AddonManifest = { meta, theme, pages, providers, subtitleSources, player: playerFlags };
   return { manifest, logs };
 }

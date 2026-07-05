@@ -27,6 +27,9 @@ import { Movie, Episode, SubtitleTrack, SubtitleSettings, StreamLink } from '../
 import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
 import { fetchStreamUrl, fetchFromTMDB, analyzeSubtitlesForSkips, streamDubbing, DubbingBatch } from '../services/apiService';
+import { useAddons } from '../addons/AddonContext';
+import { collectAddonPlayerConfig, fetchAddonSubtitles } from '../addons/playerBridge';
+import { translateSrtWithGemini } from '../services/geminiSubtitleService';
 import * as Icons from './Icons';
 import { IMAGE_BASE_URL, BACKDROP_SIZE_MEDIUM } from '../contexts/constants';
 import { translateSrtViaGoogle } from '../services/translationService';
@@ -295,7 +298,10 @@ const SubtitlesPanel: React.FC<{
     onClose: () => void,
     triggerRef: React.RefObject<HTMLElement>,
     show: boolean,
-}> = ({ tracks, activeLang, onSelect, onClose, triggerRef, show }) => {
+    aiLangs?: { code: string; label: string }[],
+    onAiTranslate?: (code: string, label: string) => void,
+    aiLoadingLabel?: string | null,
+}> = ({ tracks, activeLang, onSelect, onClose, triggerRef, show, aiLangs, onAiTranslate, aiLoadingLabel }) => {
 
     // Return focus on close
     useEffect(() => {
@@ -304,6 +310,9 @@ const SubtitlesPanel: React.FC<{
         }
     }, [show, triggerRef]);
 
+    // AI targets that have not been generated yet (generated ones appear as normal tracks above)
+    const pendingAiLangs = (aiLangs || []).filter(l => !tracks.some(t => t.lang === `ai-${l.code}`));
+
     return (
         <SidePanel title="Subtitles" onClose={onClose} show={show}>
             <div className="flex flex-col gap-2">
@@ -311,6 +320,27 @@ const SubtitlesPanel: React.FC<{
                 {tracks.map(track => (
                     <button key={track.lang} onClick={() => { onSelect(track.lang); onClose(); }} className={`player-panel-button ${activeLang === track.lang ? 'active' : ''}`}>{track.label}</button>
                 ))}
+                {pendingAiLangs.length > 0 && onAiTranslate && (
+                    <>
+                        <div className="flex items-center gap-2 mt-3 mb-1 px-1">
+                            <i className="fa-solid fa-wand-magic-sparkles text-xs text-purple-400" />
+                            <span className="text-zinc-500 text-[10px] uppercase tracking-widest font-bold">AI Subtitles · Gemini</span>
+                        </div>
+                        {pendingAiLangs.map(lang => (
+                            <button
+                                key={`ai-${lang.code}`}
+                                disabled={!!aiLoadingLabel}
+                                onClick={() => { onAiTranslate(lang.code, lang.label); }}
+                                className={`player-panel-button justify-between ${aiLoadingLabel === lang.label ? 'active' : ''} ${aiLoadingLabel ? 'opacity-60' : ''}`}
+                            >
+                                <span>{lang.label}</span>
+                                {aiLoadingLabel === lang.label
+                                    ? <div className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-white rounded-full animate-spin" />
+                                    : <i className="fa-solid fa-wand-magic-sparkles text-xs text-purple-400" />}
+                            </button>
+                        ))}
+                    </>
+                )}
             </div>
         </SidePanel>
     );
@@ -619,6 +649,27 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const [subtitles, setSubtitles] = useState<SubtitleTrack[]>([]);
     const [vttTracks, setVttTracks] = useState<{ lang: string; url: string; label: string }[]>([]);
     const [activeSubtitleLang, setActiveSubtitleLang] = useState<string | null>(null);
+
+    // ---- Addon platform: subtitle sources, AI translate & auto-skip (all optional, best-effort) ----
+    const { addons } = useAddons();
+    const addonPlayerConfig = useMemo(() => collectAddonPlayerConfig(addons), [addons]);
+    const [addonSubtitles, setAddonSubtitles] = useState<SubtitleTrack[]>([]);
+    const [aiVttTracks, setAiVttTracks] = useState<{ lang: string; url: string; label: string }[]>([]);
+    const [aiSubLoadingLabel, setAiSubLoadingLabel] = useState<string | null>(null);
+    const aiSubProgressRef = useRef('');
+    const autoSkipDoneRef = useRef<{ intro?: boolean; outro?: boolean }>({});
+    const skipAnalysisFromAddonRef = useRef(false);
+    // Stream subtitles + addon subtitles, deduplicated by language (stream tracks win)
+    const allSubtitles = useMemo(() => {
+        const seen = new Set<string>();
+        const merged: SubtitleTrack[] = [];
+        for (const sub of [...subtitles, ...addonSubtitles]) {
+            if (!sub || !sub.url || seen.has(sub.language)) continue;
+            seen.add(sub.language);
+            merged.push(sub);
+        }
+        return merged;
+    }, [subtitles, addonSubtitles]);
     const [activeCues, setActiveCues] = useState<VTTCue[]>([]);
     const defaultSubtitleSettings: SubtitleSettings = { fontSize: 100, backgroundOpacity: 0, edgeStyle: 'outline', verticalPosition: 10 };
     const [subtitleSettings, setSubtitleSettings] = useState<SubtitleSettings>(() => getScreenSpecificData('subtitleSettings', defaultSubtitleSettings));
@@ -823,6 +874,11 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             setSubtitles([]);
             setVttTracks([]);
             setSkipSegments({ intro: null, outro: null });
+            // Reset addon-provided subtitle state for the new title
+            setAddonSubtitles([]);
+            setAiVttTracks(prev => { prev.forEach(t2 => URL.revokeObjectURL(t2.url)); return []; });
+            autoSkipDoneRef.current = {};
+            skipAnalysisFromAddonRef.current = false;
             
             try {
                 // Fetch recommendations in the background — never block video start
@@ -1105,6 +1161,42 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         }
     }, [activeQuality, streamLinks, activeStreamUrl, hlsQualities]);
     
+    // Effect 2.5: Fetch subtitles contributed by enabled addons (best effort)
+    useEffect(() => {
+        if (liveChannels || isLiveScheduleMode || !item?.id) return;
+        if (addonPlayerConfig.sources.length === 0) return;
+        let active = true;
+        fetchAddonSubtitles(
+            addonPlayerConfig.sources,
+            itemType === 'tv' ? 'tv' : 'movie',
+            item.id,
+            initialSeason,
+            initialEpisode?.episode_number,
+        ).then(tracks => {
+            if (active && tracks.length > 0) setAddonSubtitles(tracks);
+        }).catch(() => {});
+        return () => { active = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [item.id, itemType, initialEpisode?.id, addonPlayerConfig.sources]);
+
+    // Effect 2.6: If the stream itself had no subtitles, run the Gemini
+    // intro/outro analysis on the first addon-provided subtitle instead.
+    useEffect(() => {
+        if (liveChannels || isLiveScheduleMode) return;
+        if (subtitles.length > 0 || addonSubtitles.length === 0) return;
+        if (skipAnalysisFromAddonRef.current) return;
+        skipAnalysisFromAddonRef.current = true;
+        let active = true;
+        const first = addonSubtitles.find(s => s.language.startsWith('en')) || addonSubtitles[0];
+        fetch(first.url)
+            .then(res => res.ok ? res.text() : Promise.reject('Failed to fetch addon subs'))
+            .then(srtText => analyzeSubtitlesForSkips(srtText))
+            .then(segments => { if (active) setSkipSegments(segments); })
+            .catch(e => console.error("Failed to analyze addon subtitles for skip markers", e));
+        return () => { active = false; };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [addonSubtitles, subtitles]);
+
     // Effect 3: Process subtitles
     useEffect(() => {
         let active = true;
@@ -1120,7 +1212,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 return vttUrl;
             };
             const newTracks: { lang: string; url: string; label: string }[] = [];
-            for (const sub of subtitles) {
+            for (const sub of allSubtitles) {
                 try {
                     const res = await fetch(sub.url);
                     if (!res.ok || !active) continue;
@@ -1131,12 +1223,12 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             }
             if (active) setVttTracks(newTracks);
         };
-        if (subtitles.length > 0) processSubtitles(); else setVttTracks([]);
+        if (allSubtitles.length > 0) processSubtitles(); else setVttTracks([]);
         return () => {
             active = false;
             createdUrls.forEach(url => URL.revokeObjectURL(url));
         }
-    }, [subtitles]);
+    }, [allSubtitles]);
 
      useEffect(() => {
         const video = videoRef.current;
@@ -1161,7 +1253,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         } else { setActiveCues([]); }
 
         return () => { if (activeTrack) activeTrack.removeEventListener('cuechange', onCueChange); };
-    }, [activeSubtitleLang, vttTracks]);
+    }, [activeSubtitleLang, vttTracks, aiVttTracks]);
 
     useEffect(() => {
         if (userLanguage === 'ar' && vttTracks.length > 0) {
@@ -1502,14 +1594,68 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     // Effect for Skip Intro/Outro logic
     useEffect(() => {
         const { intro, outro } = skipSegments;
+        const video = videoRef.current;
         if (intro && currentTime >= intro.start && currentTime < intro.end) {
+            // Addon-powered auto skip: jump the intro without waiting for a click
+            if (addonPlayerConfig.autoSkipIntro && video && !autoSkipDoneRef.current.intro && currentTime >= intro.start + 1) {
+                autoSkipDoneRef.current.intro = true;
+                video.currentTime = intro.end;
+                setActiveSkip(null);
+                setToast({ message: 'Intro skipped automatically', type: 'success' });
+                return;
+            }
             setActiveSkip('intro');
         } else if (outro && duration > 0 && currentTime >= outro.start && currentTime < outro.end) {
+            if (addonPlayerConfig.autoSkipOutro && video && !autoSkipDoneRef.current.outro && currentTime >= outro.start + 1) {
+                autoSkipDoneRef.current.outro = true;
+                video.currentTime = outro.end;
+                setActiveSkip(null);
+                setToast({ message: 'Outro skipped automatically', type: 'success' });
+                return;
+            }
             setActiveSkip('outro');
         } else if (activeSkip) {
             setActiveSkip(null);
         }
-    }, [currentTime, duration, skipSegments, activeSkip]);
+    }, [currentTime, duration, skipSegments, activeSkip, addonPlayerConfig.autoSkipIntro, addonPlayerConfig.autoSkipOutro, setToast]);
+
+    // Addon-powered AI subtitle translation (Gemini): translates an existing
+    // track into the requested language and adds it to the Subtitles panel.
+    const handleAiTranslate = useCallback(async (code: string, label: string) => {
+        const aiLang = `ai-${code}`;
+        const existing = aiVttTracks.find(t2 => t2.lang === aiLang);
+        if (existing) { setActiveSubtitleLang(aiLang); return; }
+        if (aiSubLoadingLabel) return;
+        const source = allSubtitles.find(s => s.language.startsWith('en')) || allSubtitles[0];
+        if (!source) {
+            setToast({ message: 'No subtitles available to translate yet', type: 'error' });
+            return;
+        }
+        setAiSubLoadingLabel(label);
+        aiSubProgressRef.current = '';
+        try {
+            const res = await fetch(source.url);
+            if (!res.ok) throw new Error('Could not download the source subtitles');
+            const srtText = await res.text();
+            const translated = await translateSrtWithGemini(srtText, label, (done, total) => {
+                aiSubProgressRef.current = `${done}/${total}`;
+            });
+            // Convert translated SRT to a VTT blob track
+            const srtTimestampLineRegex = /(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/g;
+            let vttContent = "WEBVTT\n\n";
+            vttContent += translated.replace(/\r/g, '').replace(srtTimestampLineRegex, (_, s, e) => `${s.replace(',', '.')} --> ${e.replace(',', '.')}`);
+            const vttUrl = URL.createObjectURL(new Blob([vttContent], { type: 'text/vtt' }));
+            const track = { lang: aiLang, url: vttUrl, label: `✨ ${label} · AI` };
+            setAiVttTracks(prev => [...prev.filter(p => p.lang !== aiLang), track]);
+            setActiveSubtitleLang(aiLang);
+            setToast({ message: `AI subtitles ready: ${label}`, type: 'success' });
+        } catch (e: any) {
+            console.error('AI subtitle translation failed:', e);
+            setToast({ message: e?.message || 'AI subtitle translation failed', type: 'error' });
+        } finally {
+            setAiSubLoadingLabel(null);
+        }
+    }, [aiVttTracks, aiSubLoadingLabel, allSubtitles, setToast]);
 
     const handleSkip = useCallback(() => {
         const video = videoRef.current;
@@ -1808,7 +1954,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     preload="metadata"
                     poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
                 >
-                {vttTracks.map(track => (
+                {[...vttTracks, ...aiVttTracks].map(track => (
                         <track key={track.lang} kind="subtitles" srcLang={track.lang} src={track.url} label={track.label} default={activeSubtitleLang === track.lang} />
                     ))}
                 </video>
@@ -1883,6 +2029,14 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-4 py-2 bg-black/60 backdrop-blur-md rounded-full text-white font-semibold text-sm flex items-center gap-2">
                         <div className="w-4 h-4 border-2 border-zinc-400 border-t-white rounded-full animate-spin"></div>
                         <span>{t('translating')} {dubbingProgress}</span>
+                    </div>
+                )}
+
+                {aiSubLoadingLabel && (
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 z-20 px-4 py-2 bg-black/60 backdrop-blur-md rounded-full text-white font-semibold text-sm flex items-center gap-2">
+                        <i className="fa-solid fa-wand-magic-sparkles text-purple-400 text-xs"></i>
+                        <div className="w-4 h-4 border-2 border-zinc-400 border-t-white rounded-full animate-spin"></div>
+                        <span>AI Subtitles · {aiSubLoadingLabel} {aiSubProgressRef.current}</span>
                     </div>
                 )}
                 
@@ -1970,11 +2124,14 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
                 <SubtitlesPanel
                     show={showSubtitlesPanel}
-                    tracks={vttTracks}
+                    tracks={[...vttTracks, ...aiVttTracks]}
                     activeLang={activeSubtitleLang}
                     onSelect={setActiveSubtitleLang}
                     onClose={() => setShowSubtitlesPanel(false)}
                     triggerRef={subtitlesButtonRef}
+                    aiLangs={addonPlayerConfig.aiTranslate}
+                    onAiTranslate={handleAiTranslate}
+                    aiLoadingLabel={aiSubLoadingLabel}
                 />
 
                 <SettingsPanel

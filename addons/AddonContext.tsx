@@ -10,7 +10,7 @@ import React, {
 } from 'react';
 import { InstalledAddon, AddonManifest, AddonPageDef } from './types';
 import { buildAddonManifest } from './runtime';
-import { BUILTIN_ADDON_SOURCES } from './builtins';
+import { BUILTIN_ADDONS, BUILTIN_ADDON_SOURCES } from './builtins';
 import { useProfile } from '../contexts/ProfileContext';
 import { getToken } from '../services/authService';
 import { isPlayerActive } from '../services/playerActivity';
@@ -130,7 +130,28 @@ export const AddonProvider: React.FC<{ children: ReactNode }> = ({ children }) =
             return a; // keep cached manifest — never break the app
           }
         }));
-        if (!cancelled) { setAddons(refreshed); persist(storageKey, refreshed); }
+        // Upgrade path: add any NEW built-in gallery addons this install
+        // doesn't know about yet (installed but disabled — user opts in).
+        const knownIds = new Set(refreshed.map(a => a.manifest?.meta?.id));
+        const newBuiltins: InstalledAddon[] = [];
+        for (const builtin of BUILTIN_ADDONS) {
+          if (knownIds.has(builtin.id)) continue;
+          try {
+            const { manifest } = await buildAddonManifest(builtin.source);
+            newBuiltins.push({
+              source: builtin.source,
+              manifest,
+              enabled: false,
+              builtin: true,
+              installedAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+          } catch (e) {
+            console.warn('New builtin addon failed to load:', builtin.id, e);
+          }
+        }
+        const merged = newBuiltins.length ? [...refreshed, ...newBuiltins] : refreshed;
+        if (!cancelled) { setAddons(merged); persist(storageKey, merged); }
         return;
       }
       // First run: seed built-ins (pages enabled, theme/provider examples installed but disabled).

@@ -2,7 +2,7 @@
 // CineStream Addon Platform — Type definitions
 // ============================================================
 
-export type AddonType = 'theme' | 'page' | 'provider' | 'mixed';
+export type AddonType = 'theme' | 'page' | 'provider' | 'player' | 'mixed';
 
 export interface AddonMeta {
   id: string;
@@ -55,11 +55,51 @@ export interface AddonProviderDef {
   tvUrl?: string;    // template: {id} {season} {episode}
 }
 
+// ---- Player addons (subtitles / skip / AI features) ----
+
+/**
+ * A subtitle source addon registers an HTTP JSON API that returns a list of
+ * subtitle tracks for a TMDB title. The player queries it and lists the
+ * returned tracks in the Subtitles panel next to the stream's own subtitles.
+ * URL templates: {id} = TMDB id, {season}, {episode}.
+ * The endpoint must return a JSON array of objects with at least
+ * { url, language } (optional: display, format).
+ */
+export interface AddonSubtitleSourceDef {
+  id: string;
+  name: string;
+  movieUrl?: string;
+  tvUrl?: string;
+  /** Optional ISO-639-1 filter, e.g. "ar" keeps only Arabic tracks. */
+  language?: string;
+  /** Max tracks contributed by this source (default 6, hard cap 12). */
+  maxTracks?: number;
+}
+
+/** One AI translation target shown in the player's Subtitles panel. */
+export interface AddonAiTranslateLang {
+  code: string;
+  label: string;
+}
+
+/** Player behaviour flags an addon can enable. */
+export interface AddonPlayerFlags {
+  /** Automatically jump over the Gemini-detected intro segment. */
+  autoSkipIntro?: boolean;
+  /** Automatically jump over the Gemini-detected outro segment. */
+  autoSkipOutro?: boolean;
+  /** Gemini-powered subtitle translation targets for the Subtitles panel. */
+  aiTranslate?: AddonAiTranslateLang[];
+}
+
 export interface AddonManifest {
   meta: AddonMeta;
   theme: Record<string, string> | null;
   pages: AddonPageDef[];
   providers: AddonProviderDef[];
+  /** Optional — older cached manifests may not carry these fields. */
+  subtitleSources?: AddonSubtitleSourceDef[];
+  player?: AddonPlayerFlags | null;
 }
 
 export interface InstalledAddon {
