@@ -101,6 +101,9 @@ const LoginPage: React.FC = () => {
         mode === "login"
           ? await login(username, password)
           : await signup(username, password);
+      // Remember the password locally (this device only) so the user can
+      // view it later from the Settings hub. Never sent anywhere.
+      try { localStorage.setItem('cineAuthPassMemo', password); } catch {}
       resetGuestWatchCount();
       setCurrentUser(user);
       setToast({

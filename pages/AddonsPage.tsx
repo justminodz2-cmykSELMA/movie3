@@ -16,6 +16,21 @@ import {
 } from '../addons/builtins';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
+import * as authService from '../services/authService';
+
+// Neutral codenames shown in the Preferred Server picker.
+// Only display labels — provider ids and playback logic are untouched.
+const SERVER_CODENAMES: Record<string, string> = {
+  vsembed: 'Nova V1',
+  moviebox: 'Blaze V2',
+  veloratv: 'Orion V3',
+  akwam: 'Zen V4',
+  aflam: 'Pulse V5',
+  'arabic-toons': 'Comet V6',
+  ristoanime: 'Nebula V7',
+  td: 'Titan V8',
+};
+const SERVER_IDS = Object.keys(SERVER_CODENAMES);
 
 const TYPE_LABEL: Record<string, { label: string; icon: string }> = {
   theme: { label: 'Theme', icon: 'fa-solid fa-palette' },
@@ -80,6 +95,128 @@ const AddonManageCard: React.FC<{
   );
 };
 
+// ---------- Account card (read-only info + password reveal) ----------
+const AccountCard: React.FC = () => {
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const [authUser, setAuthUser] = useState<authService.AuthUser | null>(authService.getCachedUser());
+  const [showPass, setShowPass] = useState(false);
+
+  React.useEffect(() => {
+    authService.fetchMe().then(setAuthUser).catch(() => {});
+  }, []);
+
+  let passMemo: string | null = null;
+  try { passMemo = localStorage.getItem('cineAuthPassMemo'); } catch {}
+
+  if (!authUser) {
+    return (
+      <div className="bg-[var(--surface)] rounded-2xl p-5 border border-zinc-800 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <i className="fa-solid fa-user text-xl text-zinc-500" />
+          <p className="text-sm text-zinc-400">{t('accountSection')}</p>
+        </div>
+        <button onClick={() => navigate('/login')} className="px-4 py-1.5 text-sm font-bold text-white bg-red-600 hover:bg-red-500 rounded-lg focusable btn-press">
+          Sign In
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-[var(--surface)] rounded-2xl p-5 border border-zinc-800">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div className="flex items-center gap-4 min-w-0">
+          <div className="w-12 h-12 rounded-full bg-red-600/10 border border-red-600/30 flex items-center justify-center flex-shrink-0">
+            <i className="fa-solid fa-user text-xl text-red-500" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="font-bold text-white truncate">{authUser.username}</h3>
+            <p className="text-[11px] text-zinc-500">
+              {authUser.role === 'admin' ? 'Administrator' : 'Member'}
+              {authUser.createdAt ? ` • ${t('memberSince')} ${new Date(authUser.createdAt).toLocaleDateString()}` : ''}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          {authUser.role === 'admin' && (
+            <button onClick={() => navigate('/admin')} className="px-3 py-1.5 rounded-lg text-xs font-bold text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 focusable btn-press">
+              <i className="fa-solid fa-shield-halved mr-1" />Admin
+            </button>
+          )}
+          <button
+            onClick={async () => { await authService.logout(); setAuthUser(null); }}
+            className="px-3 py-1.5 rounded-lg text-xs font-bold text-red-400 bg-red-500/10 hover:bg-red-500/20 focusable btn-press"
+          >
+            <i className="fa-solid fa-right-from-bracket mr-1" />Log Out
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+        <div className="bg-black/30 border border-zinc-800 rounded-xl px-4 py-3">
+          <p className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">{t('usernameLabel')}</p>
+          <p className="text-sm text-white font-mono mt-1 truncate" dir="ltr">{authUser.username}</p>
+        </div>
+        <div className="bg-black/30 border border-zinc-800 rounded-xl px-4 py-3">
+          <div className="flex items-center justify-between">
+            <p className="text-[10px] font-bold tracking-widest text-zinc-500 uppercase">{t('passwordLabel')}</p>
+            {passMemo && (
+              <button onClick={() => setShowPass(s => !s)} className="text-zinc-400 hover:text-white focusable px-2" aria-label="toggle password">
+                <i className={`fa-solid ${showPass ? 'fa-eye-slash' : 'fa-eye'} text-xs`} />
+              </button>
+            )}
+          </div>
+          {passMemo ? (
+            <p className="text-sm text-white font-mono mt-1 truncate" dir="ltr">{showPass ? passMemo : '•'.repeat(Math.min(passMemo.length, 12))}</p>
+          ) : (
+            <p className="text-[11px] text-zinc-500 mt-1">{t('passwordMemoHint')}</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// ---------- Preferred server picker ----------
+const PreferredServerCard: React.FC = () => {
+  const { t } = useTranslation();
+  const { getScreenSpecificData, setScreenSpecificData, setToast } = useProfile();
+  const prefs: string[] = getScreenSpecificData('serverPreferences', []) || [];
+  const selected = prefs.length > 0 ? prefs[0] : null;
+
+  const choose = (id: string | null) => {
+    setScreenSpecificData('serverPreferences', id ? [id] : []);
+    setToast({ message: t('serverSaved'), type: 'success' });
+  };
+
+  return (
+    <div className="bg-[var(--surface)] rounded-2xl p-5 border border-zinc-800">
+      <div className="flex items-center gap-3 mb-1">
+        <i className="fa-solid fa-server text-lg text-red-500" />
+        <h3 className="font-bold text-white">{t('preferredServer')}</h3>
+      </div>
+      <p className="text-xs text-zinc-500 mb-4 leading-relaxed">{t('preferredServerDesc')}</p>
+      <div className="flex gap-2 flex-wrap">
+        <button
+          onClick={() => choose(null)}
+          className={`px-4 py-2 rounded-full text-xs font-bold border focusable btn-press ${selected === null ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-400'}`}
+        >
+          <i className="fa-solid fa-wand-magic-sparkles mr-1" />{t('serverAuto')}
+        </button>
+        {SERVER_IDS.map(id => (
+          <button
+            key={id}
+            onClick={() => choose(id)}
+            className={`px-4 py-2 rounded-full text-xs font-bold border focusable btn-press ${selected === id ? 'bg-red-600 border-red-600 text-white' : 'bg-zinc-900 border-zinc-700 text-zinc-300 hover:border-zinc-400'}`}
+          >
+            {SERVER_CODENAMES[id]}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 const AddonsPage: React.FC = () => {
   const { addons, installAddon, uninstallAddon, toggleAddon } = useAddons();
   const { setToast } = useProfile();
@@ -131,15 +268,32 @@ const AddonsPage: React.FC = () => {
       <div className="px-4 md:px-10 pt-24 pb-20 min-h-screen">
         <div className="flex items-center gap-4 mb-2">
           <div className="w-14 h-14 rounded-2xl bg-red-600/10 border border-red-600/30 flex items-center justify-center">
-            <i className="fa-solid fa-puzzle-piece text-2xl text-red-500" />
+            <i className="fa-solid fa-gear text-2xl text-red-500" />
           </div>
           <div>
-            <h1 className="text-2xl md:text-3xl font-extrabold text-white">{t('addonStudio')}</h1>
-            <p className="text-sm text-zinc-400">{t('addonStudioSubtitle')}</p>
+            <h1 className="text-2xl md:text-3xl font-extrabold text-white">{t('settingsHubTitle')}</h1>
+            <p className="text-sm text-zinc-400">{t('settingsHubSubtitle')}</p>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mt-8">
+        {/* -------- General settings: account + preferred server -------- */}
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 mt-8">
+          <AccountCard />
+          <PreferredServerCard />
+        </div>
+
+        {/* -------- Addons section -------- */}
+        <div className="flex items-center gap-3 mt-10 mb-2">
+          <div className="w-10 h-10 rounded-xl bg-red-600/10 border border-red-600/30 flex items-center justify-center">
+            <i className="fa-solid fa-puzzle-piece text-lg text-red-500" />
+          </div>
+          <div>
+            <h2 className="text-xl font-extrabold text-white">{t('addonStudio')}</h2>
+            <p className="text-xs text-zinc-400">{t('addonStudioSubtitle')}</p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-8 mt-6">
           {/* -------- Installed addons -------- */}
           <section>
             <h2 className="text-lg font-bold text-white mb-4">

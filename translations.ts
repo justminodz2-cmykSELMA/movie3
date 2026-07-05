@@ -43,6 +43,21 @@ export const translations = {
     'studioSaved': 'Saved — live on your TV',
     'studioForProfile': 'Addons for',
 
+    // Settings hub (Addons page)
+    'settingsHubTitle': 'Settings',
+    'settingsHubSubtitle': 'Account, playback and addons — all in one place',
+    'accountSection': 'Account',
+    'usernameLabel': 'Username',
+    'passwordLabel': 'Password',
+    'passwordMemoHint': 'Will appear here after your next sign-in on this device',
+    'roleLabel': 'Role',
+    'memberSince': 'Member since',
+    'preferredServer': 'Preferred Server',
+    'preferredServerDesc': 'Pick the server that starts first when you play something. The others stay as automatic backups. Auto keeps the current default behavior.',
+    'serverAuto': 'Auto (Default)',
+    'serverSaved': 'Preferred server saved',
+    'addonsSection': 'Addons',
+
     // General
     'save': 'SAVE',
     'cancel': 'CANCEL',
@@ -372,6 +387,21 @@ export const translations = {
     'studioLinkInvalid': 'رابط الاستوديو غير صالح أو منتهي الصلاحية. افتح تلميح استوديو الإضافات على التلفاز للحصول على رابطك الخاص.',
     'studioSaved': 'تم الحفظ — مباشر على تلفازك',
     'studioForProfile': 'إضافات',
+
+    // Settings hub (Addons page)
+    'settingsHubTitle': 'الإعدادات',
+    'settingsHubSubtitle': 'الحساب والتشغيل والإضافات — كلها في مكان واحد',
+    'accountSection': 'الحساب',
+    'usernameLabel': 'اسم المستخدم',
+    'passwordLabel': 'كلمة المرور',
+    'passwordMemoHint': 'ستظهر هنا بعد تسجيل الدخول القادم على هذا الجهاز',
+    'roleLabel': 'الدور',
+    'memberSince': 'عضو منذ',
+    'preferredServer': 'المشغل المفضل',
+    'preferredServerDesc': 'اختر المشغل الذي يبدأ أولاً عند التشغيل، ويبقى الباقون احتياطاً تلقائياً. "تلقائي" يحافظ على السلوك الافتراضي الحالي بالضبط.',
+    'serverAuto': 'تلقائي (افتراضي)',
+    'serverSaved': 'تم حفظ المشغل المفضل',
+    'addonsSection': 'الإضافات',
 
     // General
     'save': 'حفظ',
