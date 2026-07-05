@@ -6,6 +6,7 @@ import http from "http";
 import https from "https";
 import { URL } from "url";
 import { Readable } from "stream";
+import zlib from "zlib";
 import { Redis } from "@upstash/redis";
 
 const app = express();
@@ -881,6 +882,186 @@ app.use((req, res, next) => {
   // Core extraction with caching. `fresh=true` bypasses caches (self-heal),
   // but a just-refreshed result (< 20s old) is reused so a burst of healing
   // playlist requests triggers only ONE re-scrape.
+  // ==========================================================
+  // DEFAULT SUBTITLES (OpenSubtitles) — merged into every vs-extract
+  // response so subtitle tracks always show up in the player by default
+  // (MovieBox-style). Purely additive: scraped provider subtitles keep
+  // priority, these are appended after them.
+  // ==========================================================
+  const VS_SUB_LANGS: Record<string, string> = {
+    en: "English", ar: "Arabic", fr: "French", es: "Spanish", de: "German",
+    it: "Italian", pt: "Portuguese", ru: "Russian", tr: "Turkish",
+  };
+  const VS_SUB_MAX_PER_LANG = 3;
+  // TMDB v3 key — same public key the frontend already ships with
+  // (contexts/constants.ts); used server-side only to resolve IMDB ids.
+  const VS_TMDB_KEY = "12b96f7cdd99dcc564c5723a2f256b24";
+
+  const vsOpenSubsHeaders = {
+    "X-User-Agent": "trailers.to-UA",
+    "User-Agent":
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+  };
+
+  // OpenSubtitles' legacy REST endpoint has a redirect bug: mixed-case URLs
+  // trigger a 302 to "https://_/..." (literal underscore host), which makes
+  // fetch die with EAI_AGAIN. Fix: lowercase the URL up-front, follow any
+  // redirect manually, and rewrite the broken "_" host back to the real one.
+  async function fetchOpenSubtitlesREST(url: string, timeoutMs = 8000) {
+    const targetUrl = url.toLowerCase();
+    let res = await fetch(targetUrl, {
+      headers: vsOpenSubsHeaders,
+      redirect: "manual",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+
+    if (res.status >= 300 && res.status < 400) {
+      let location = res.headers.get("location");
+      if (location) {
+        if (location.startsWith("https://_/")) {
+          location = location.replace("https://_/", "https://rest.opensubtitles.org/");
+        } else if (location.startsWith("http://_/")) {
+          location = location.replace("http://_/", "https://rest.opensubtitles.org/");
+        }
+        res = await fetch(location, {
+          headers: vsOpenSubsHeaders,
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      }
+    }
+    return res;
+  }
+
+  // Resolve IMDB id from TMDB (memory + redis cached — it never changes).
+  const vsImdbCache = new Map<string, string | null>();
+  async function vsGetImdbId(type: string, tmdb_id: string): Promise<string | null> {
+    const key = `vsimdb:${type}:${tmdb_id}`;
+    if (vsImdbCache.has(key)) return vsImdbCache.get(key) ?? null;
+    if (redis) {
+      try {
+        const raw = await redisGet(key);
+        if (raw) { vsImdbCache.set(key, raw === "-" ? null : raw); return raw === "-" ? null : raw; }
+      } catch {}
+    }
+    let imdb: string | null = null;
+    try {
+      const r = await fetch(
+        `https://api.themoviedb.org/3/${type === "tv" ? "tv" : "movie"}/${tmdb_id}/external_ids?api_key=${VS_TMDB_KEY}`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (r.ok) {
+        const d: any = await r.json();
+        imdb = d && typeof d.imdb_id === "string" && /^tt\d+$/.test(d.imdb_id) ? d.imdb_id : null;
+      }
+    } catch {}
+    vsImdbCache.set(key, imdb);
+    if (redis) { try { await redis.set(key, imdb || "-", { ex: 60 * 60 * 24 * 30 }); } catch {} }
+    return imdb;
+  }
+
+  type VsSub = { lang: string; url: string };
+
+  // Primary source: OpenSubtitles legacy REST (with the lowercase fix).
+  async function vsSubsFromRest(imdb: string, season?: number, episode?: number): Promise<VsSub[]> {
+    const cleanImdb = imdb.replace(/^tt/, "");
+    const url =
+      season != null && episode != null
+        ? `https://rest.opensubtitles.org/search/episode-${episode}/imdbid-${cleanImdb}/season-${season}`
+        : `https://rest.opensubtitles.org/search/imdbid-${cleanImdb}`;
+    const res = await fetchOpenSubtitlesREST(url);
+    if (!res.ok) throw new Error(`REST ${res.status}`);
+    const data: any = await res.json();
+    if (!Array.isArray(data)) return [];
+
+    const perLang = new Map<string, any[]>();
+    for (const item of data) {
+      const iso = item?.ISO639;
+      if (!iso || !VS_SUB_LANGS[iso] || !item.SubDownloadLink) continue;
+      const arr = perLang.get(iso) || [];
+      arr.push(item);
+      perLang.set(iso, arr);
+    }
+    const out: VsSub[] = [];
+    for (const [iso, arr] of perLang) {
+      arr.sort((a, b) => (parseInt(b.SubDownloadsCnt) || 0) - (parseInt(a.SubDownloadsCnt) || 0));
+      for (const item of arr.slice(0, VS_SUB_MAX_PER_LANG)) {
+        out.push({ lang: VS_SUB_LANGS[iso], url: String(item.SubDownloadLink) });
+      }
+    }
+    return out;
+  }
+
+  // Fallback source: free OpenSubtitles mirror (no key, datacenter-IP
+  // friendly) so default subtitles still appear if rest.opensubtitles.org
+  // walls this server's IP behind a Cloudflare challenge.
+  const VS_SUB_ISO3: Record<string, string> = {
+    eng: "English", ara: "Arabic", fre: "French", fra: "French", spa: "Spanish",
+    ger: "German", deu: "German", ita: "Italian", por: "Portuguese", pob: "Portuguese",
+    rus: "Russian", tur: "Turkish",
+  };
+  async function vsSubsFromMirror(imdb: string, season?: number, episode?: number): Promise<VsSub[]> {
+    const url =
+      season != null && episode != null
+        ? `https://opensubtitles-v3.strem.io/subtitles/series/${imdb}:${season}:${episode}.json`
+        : `https://opensubtitles-v3.strem.io/subtitles/movie/${imdb}.json`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+    if (!res.ok) throw new Error(`Mirror ${res.status}`);
+    const data: any = await res.json();
+    const subs = Array.isArray(data?.subtitles) ? data.subtitles : [];
+    const perLang = new Map<string, number>();
+    const out: VsSub[] = [];
+    for (const s of subs) {
+      const label = VS_SUB_ISO3[String(s?.lang || "").toLowerCase()];
+      if (!label || !s.url) continue;
+      const n = perLang.get(label) || 0;
+      if (n >= VS_SUB_MAX_PER_LANG) continue;
+      perLang.set(label, n + 1);
+      out.push({ lang: label, url: String(s.url) });
+    }
+    return out;
+  }
+
+  // Fetch default subtitles (cached). Never throws — an empty list simply
+  // means the player falls back to whatever the stream provider scraped.
+  async function vsFetchDefaultSubs(type: string, tmdb_id: string, season?: number, episode?: number): Promise<VsSub[]> {
+    const key = `vssubs:${type}:${tmdb_id}:${season ?? ""}:${episode ?? ""}`;
+    const mem = vsCache.get(key);
+    if (mem && Date.now() - mem.timestamp < 1000 * 60 * 60 * 6) return mem.response;
+    if (redis) {
+      try {
+        const raw = await redisGet(key);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          vsCacheSet(key, parsed, false);
+          return parsed;
+        }
+      } catch {}
+    }
+    let subs: VsSub[] = [];
+    try {
+      const imdb = await vsGetImdbId(type, tmdb_id);
+      if (imdb) {
+        try {
+          subs = await vsSubsFromRest(imdb, season, episode);
+        } catch (e: any) {
+          console.warn(`[VS subs] REST failed (${e.message}), trying mirror`);
+        }
+        if (!subs.length) {
+          try {
+            subs = await vsSubsFromMirror(imdb, season, episode);
+          } catch (e: any) {
+            console.warn(`[VS subs] mirror failed (${e.message})`);
+          }
+        }
+      }
+    } catch {}
+    if (subs.length) {
+      vsCacheSet(key, subs, true);
+      if (redis) { try { await redis.set(key, JSON.stringify(subs), { ex: 60 * 60 * 12 }); } catch {} }
+    }
+    return subs;
+  }
+
   async function vsExtract(type: string, tmdb_id: string, season?: number, episode?: number, fresh = false) {
     const cacheKey = `vsx:${type}:${tmdb_id}:${season ?? ""}:${episode ?? ""}`;
 
@@ -914,11 +1095,35 @@ app.use((req, res, next) => {
       return acc;
     }, {});
 
+    // Default subtitles are fetched IN PARALLEL with the provider race, so
+    // they add zero latency to extraction.
+    const defaultSubsPromise = vsFetchDefaultSubs(type, tmdb_id, season, episode).catch(() => [] as VsSub[]);
+
     const winner = await vsFirstSuccess(urls);
+    const defaultSubs = await defaultSubsPromise;
+
+    // Merge: scraped provider subtitles keep priority, defaults are appended
+    // (deduped by URL and capped per language across both lists).
+    const mergedSubs: VsSub[] = [...(winner.subtitles || [])];
+    const seenUrls = new Set(mergedSubs.map((s: any) => s && s.url));
+    const langCount = new Map<string, number>();
+    for (const s of mergedSubs) {
+      const l = String((s as any).lang || "").toLowerCase();
+      langCount.set(l, (langCount.get(l) || 0) + 1);
+    }
+    for (const sub of defaultSubs) {
+      if (!sub || !sub.url || seenUrls.has(sub.url)) continue;
+      const l = sub.lang.toLowerCase();
+      if ((langCount.get(l) || 0) >= VS_SUB_MAX_PER_LANG) continue;
+      langCount.set(l, (langCount.get(l) || 0) + 1);
+      seenUrls.add(sub.url);
+      mergedSubs.push(sub);
+    }
+
     const result = {
       domain: winner.domain,
       hlsUrl: winner.hlsUrl,
-      subtitles: winner.subtitles,
+      subtitles: mergedSubs,
       ctx: vsPackCtx(type, tmdb_id, season, episode),
     };
 
@@ -1216,7 +1421,22 @@ app.use((req, res, next) => {
 
     try {
       const subtitleRes = await vsFetch(fileUrl, {}, 10000);
-      const raw = await subtitleRes.text();
+
+      // OpenSubtitles download links serve gzipped SRT files — detect the
+      // gzip magic bytes and decompress before converting to VTT.
+      const arrayBuffer = await subtitleRes.arrayBuffer();
+      let buffer = Buffer.from(arrayBuffer);
+      const isGzipped =
+        (buffer.length > 2 && buffer[0] === 0x1f && buffer[1] === 0x8b) ||
+        fileUrl.toLowerCase().includes(".gz");
+      if (isGzipped) {
+        try {
+          buffer = zlib.gunzipSync(buffer);
+        } catch (e: any) {
+          console.error("[VS] Failed to gunzip subtitle:", e.message);
+        }
+      }
+      const raw = buffer.toString("utf-8");
 
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Content-Type", "text/vtt");
