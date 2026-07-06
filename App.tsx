@@ -57,6 +57,29 @@ const SystemUpdateNotice: React.FC = () => {
   return null;
 };
 
+// One-time toast announcing this release (TV zoom fix). Shown once per
+// device the first time the app is opened after this update ships.
+const APP_UPDATE_NOTICE_KEY = 'cineAppUpdateNoticeV3';
+const AppUpdateNotice: React.FC = () => {
+  const { setToast } = useProfile();
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(APP_UPDATE_NOTICE_KEY) === '1') return;
+      const timer = window.setTimeout(() => {
+        setToast({
+          message: 'app updated: tv zoom fixed, download from vimovies.online',
+          type: 'success',
+        });
+      }, 1200);
+      localStorage.setItem(APP_UPDATE_NOTICE_KEY, '1');
+      return () => window.clearTimeout(timer);
+    } catch {
+      /* localStorage unavailable — skip notice */
+    }
+  }, [setToast]);
+  return null;
+};
+
 const GlobalModal: React.FC = () => {
     const { modalItem, setModalItem } = useProfile();
     if (!modalItem) return null;
@@ -264,6 +287,7 @@ const App: React.FC = () => {
           </HashRouter>
           <ToastContainer />
           <SystemUpdateNotice />
+          <AppUpdateNotice />
         </AddonProvider>
       </ProfileProvider>
     </LanguageProvider>
