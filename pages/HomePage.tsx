@@ -196,8 +196,23 @@ const Hero: React.FC<{
               {slide.titleText}
             </h1>
           )}
+          <div
+            className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base text-zinc-200"
+            style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.7)" }}
+          >
+            {slide.metaParts.map((part, i) => (
+              <React.Fragment key={`${part}-${i}`}>
+                {i > 0 && <span>•</span>}
+                <span>{part}</span>
+              </React.Fragment>
+            ))}
+            <span>•</span>
+            <span className="px-2 py-0.5 border border-zinc-400 text-sm rounded">
+              {slide.ratingBadge}
+            </span>
+          </div>
           {slide.item && (
-            <div className="flex items-center gap-3 mb-5">
+            <div className="flex items-center gap-3 mt-5">
               <button
                 onClick={() => onPlay?.(slide)}
                 className="focusable flex items-center gap-2 bg-white text-black font-semibold text-base px-6 py-2.5 rounded-full hover:bg-zinc-200 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
@@ -214,21 +229,6 @@ const Hero: React.FC<{
               </button>
             </div>
           )}
-          <div
-            className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base text-zinc-200"
-            style={{ textShadow: "1px 1px 2px rgba(0,0,0,0.7)" }}
-          >
-            {slide.metaParts.map((part, i) => (
-              <React.Fragment key={`${part}-${i}`}>
-                {i > 0 && <span>•</span>}
-                <span>{part}</span>
-              </React.Fragment>
-            ))}
-            <span>•</span>
-            <span className="px-2 py-0.5 border border-zinc-400 text-sm rounded">
-              {slide.ratingBadge}
-            </span>
-          </div>
         </div>
       </div>
 
