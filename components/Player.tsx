@@ -1247,10 +1247,21 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         let active = true;
         let createdUrls: string[] = [];
         const processSubtitles = async () => {
-            const srtTimestampLineRegex = /(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/g;
-            const processSrtToVtt = (srtText: string) => {
-                let vttContent = "WEBVTT\n\n";
-                vttContent += srtText.replace(/\r/g, '').replace(srtTimestampLineRegex, (_, s, e) => `${s.replace(',', '.')} --> ${e.replace(',', '.')}`);
+            // Tolerant timestamp matcher: hours optional, 1-3 digit milliseconds, comma or dot.
+            const srtTimestampLineRegex = /(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d{1,3})/g;
+            const normalizeTime = (h: string | undefined, m: string, s: string, ms: string) =>
+                `${(h ? h.replace(':', '') : '0').padStart(2, '0')}:${m.padStart(2, '0')}:${s}.${ms.padEnd(3, '0')}`;
+            const processSrtToVtt = (rawText: string) => {
+                // Strip BOM and normalize line endings.
+                const srtText = rawText.replace(/^\uFEFF/, '').replace(/\r/g, '');
+                let vttContent: string;
+                if (/^\s*WEBVTT/.test(srtText)) {
+                    // Already a valid VTT file – don't prepend a second header.
+                    vttContent = srtText.trimStart();
+                } else {
+                    vttContent = "WEBVTT\n\n" + srtText.replace(srtTimestampLineRegex,
+                        (_, h1, m1, s1, ms1, h2, m2, s2, ms2) => `${normalizeTime(h1, m1, s1, ms1)} --> ${normalizeTime(h2, m2, s2, ms2)}`);
+                }
                 const blob = new Blob([vttContent], { type: 'text/vtt' });
                 const vttUrl = URL.createObjectURL(blob);
                 createdUrls.push(vttUrl);
