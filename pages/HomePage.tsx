@@ -117,6 +117,8 @@ interface HeroSlide {
   metaParts: string[];
   ratingBadge: string;
   comingSoonText?: string;
+  item?: any; // the movie/show behind this slide (for Watch now)
+  type?: string; // 'movie' | 'tv'
 }
 
 const REGULAR_DEFAULT_SLIDE: HeroSlide = {
@@ -128,6 +130,8 @@ const REGULAR_DEFAULT_SLIDE: HeroSlide = {
   metaParts: ["Show", "Thriller", "2025", "3 seasons"],
   ratingBadge: "TV-MA",
   comingSoonText: "Coming June 27",
+  item: { id: 93405, name: "Squid Game", media_type: "tv" },
+  type: "tv",
 };
 
 const KIDS_DEFAULT_SLIDE: HeroSlide = {
@@ -138,12 +142,16 @@ const KIDS_DEFAULT_SLIDE: HeroSlide = {
   badge: "MOVIE",
   metaParts: ["Movie", "Animation", "2024", "1h 34m"],
   ratingBadge: "PG",
+  item: { id: 1011985, title: "Kung Fu Panda 4", media_type: "movie" },
+  type: "movie",
 };
 
-const Hero: React.FC<{ slide: HeroSlide; isKids: boolean }> = ({
-  slide,
-  isKids,
-}) => {
+const Hero: React.FC<{
+  slide: HeroSlide;
+  isKids: boolean;
+  onPlay?: (slide: HeroSlide) => void;
+  onWatchLater?: (slide: HeroSlide) => void;
+}> = ({ slide, isKids, onPlay, onWatchLater }) => {
   const accentClass = isKids ? "text-blue-500" : "text-red-600";
 
   return (
@@ -203,6 +211,24 @@ const Hero: React.FC<{ slide: HeroSlide; isKids: boolean }> = ({
               {slide.ratingBadge}
             </span>
           </div>
+          {slide.item && (
+            <div className="flex items-center gap-3 mt-6">
+              <button
+                onClick={() => onPlay?.(slide)}
+                className="flex items-center gap-2 bg-white text-black font-semibold text-base px-6 py-2.5 rounded-full hover:bg-zinc-200 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+              >
+                <i className="fas fa-play text-sm"></i>
+                <span>Watch now</span>
+              </button>
+              <button
+                onClick={() => onWatchLater?.(slide)}
+                className="flex items-center gap-2 bg-black/40 text-white font-semibold text-base px-6 py-2.5 rounded-full border border-zinc-400/70 backdrop-blur-sm hover:bg-black/60 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+              >
+                <i className="far fa-clock text-sm"></i>
+                <span>Watch later</span>
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
@@ -1274,6 +1300,8 @@ const HomePage: React.FC = () => {
                 : type === "movie"
                   ? "PG-13"
                   : "TV-MA",
+              item,
+              type,
             } as HeroSlide;
           } catch {
             return null;
@@ -1691,7 +1719,22 @@ const HomePage: React.FC = () => {
       ) : (
         <div className="px-4 md:px-10 pt-24">
           <>
-            <Hero slide={heroSlides[heroIndex] || (isKidsMode ? KIDS_DEFAULT_SLIDE : REGULAR_DEFAULT_SLIDE)} isKids={isKidsMode} />
+            <Hero
+              slide={heroSlides[heroIndex] || (isKidsMode ? KIDS_DEFAULT_SLIDE : REGULAR_DEFAULT_SLIDE)}
+              isKids={isKidsMode}
+              onPlay={(s) => {
+                if (!s.item) return;
+                navigate("/player", {
+                  state: {
+                    item: s.item,
+                    type: s.type || s.item.media_type || (s.item.title ? "movie" : "tv"),
+                  },
+                });
+              }}
+              onWatchLater={(s) => {
+                if (s.item) handleOpenModal(s.item as Movie);
+              }}
+            />
             <div className="relative z-10 mt-12 space-y-20">
               <ContentRow
                 title={isKidsMode ? t("kidsFavorites") : t("yourNextWatch")}

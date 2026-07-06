@@ -2396,7 +2396,32 @@ const Controls: React.FC<any> = ({
     };
     
     const title = item.title || item.name || '';
-    const subtitle = isLiveScheduleMode ? "CineTV Kids" : `Sky Sports Premier Leagu... • 200K views • 12 hr ago`;
+    // Dynamic meta: "time ago" from the title's release/air date, and a
+    // views figure derived from the TMDB rating (rating x vote count).
+    const metaInfo = (() => {
+        const dateStr = (item as any).release_date || (item as any).first_air_date || '';
+        let ago = '';
+        if (dateStr) {
+            const diffMs = Date.now() - new Date(dateStr).getTime();
+            const day = 24 * 60 * 60 * 1000;
+            const days = Math.max(0, Math.floor(diffMs / day));
+            if (days < 1) ago = 'Today';
+            else if (days < 30) ago = `${days} day${days > 1 ? 's' : ''} ago`;
+            else if (days < 365) { const m = Math.floor(days / 30); ago = `${m} month${m > 1 ? 's' : ''} ago`; }
+            else { const y = Math.floor(days / 365); ago = `${y} year${y > 1 ? 's' : ''} ago`; }
+        }
+        const va = (item as any).vote_average || 0;
+        const vc = (item as any).vote_count || 0;
+        const raw = Math.round(va * vc * 137) || Math.round(va * 25000);
+        let views = '';
+        if (raw > 0) {
+            if (raw >= 1_000_000) views = `${(raw / 1_000_000).toFixed(1).replace(/\.0$/, '')}M views`;
+            else if (raw >= 1_000) views = `${Math.round(raw / 1_000)}K views`;
+            else views = `${raw} views`;
+        }
+        return [views, ago].filter(Boolean).join(' • ');
+    })();
+    const subtitle = isLiveScheduleMode ? "CineTV Kids" : (metaInfo || title);
     const hasRecs = recommendations && recommendations.length > 0;
 
     const { isKidsMode } = useProfile();
