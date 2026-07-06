@@ -2543,10 +2543,15 @@ const Controls: React.FC<any> = ({
                     {/* Left Info Panel */}
                     <div ref={infoPanelRef} className="bg-white/10 p-5 rounded-lg max-w-lg focus-within:bg-white/90 focus-within:text-black transition-colors duration-300">
                         <h1 tabIndex={0} className="text-2xl font-bold focusable outline-none">{title}</h1>
-                        {description && (
-                            <p className="text-sm mt-2 text-zinc-300 line-clamp-2 leading-snug">{description}</p>
-                        )}
-                        <p className="text-base mt-2">{subtitle}</p>
+                        <p className="text-base mt-2 flex items-center gap-2 min-w-0">
+                            {description && (
+                                <>
+                                    <span className="truncate max-w-[50%] flex-shrink min-w-0">{description}</span>
+                                    <span className="flex-shrink-0">•</span>
+                                </>
+                            )}
+                            <span className="whitespace-nowrap flex-shrink-0">{subtitle}</span>
+                        </p>
                     </div>
 
                     {/* Right Controls Panel */}

@@ -200,14 +200,14 @@ const Hero: React.FC<{
             <div className="flex items-center gap-3 mb-5">
               <button
                 onClick={() => onPlay?.(slide)}
-                className="flex items-center gap-2 bg-white text-black font-semibold text-base px-6 py-2.5 rounded-full hover:bg-zinc-200 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+                className="focusable flex items-center gap-2 bg-white text-black font-semibold text-base px-6 py-2.5 rounded-full hover:bg-zinc-200 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
               >
                 <i className="fas fa-play text-sm"></i>
                 <span>Watch now</span>
               </button>
               <button
                 onClick={() => onWatchLater?.(slide)}
-                className="flex items-center gap-2 bg-black/40 text-white font-semibold text-base px-6 py-2.5 rounded-full border border-zinc-400/70 backdrop-blur-sm hover:bg-black/60 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
+                className="focusable flex items-center gap-2 bg-black/40 text-white font-semibold text-base px-6 py-2.5 rounded-full border border-zinc-400/70 backdrop-blur-sm hover:bg-black/60 transition-colors focus:outline-none focus:ring-2 focus:ring-white"
               >
                 <i className="far fa-clock text-sm"></i>
                 <span>Watch later</span>
