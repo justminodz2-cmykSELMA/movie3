@@ -2422,6 +2422,9 @@ const Controls: React.FC<any> = ({
         return [views, ago].filter(Boolean).join(' • ');
     })();
     const subtitle = isLiveScheduleMode ? "CineTV Kids" : (metaInfo || title);
+    // Real, functional description (movie/episode overview) shown under the
+    // title, exactly as it used to be.
+    const description = isLiveScheduleMode ? '' : ((item as any).overview || (item as any).description || '');
     const hasRecs = recommendations && recommendations.length > 0;
 
     const { isKidsMode } = useProfile();
@@ -2541,6 +2544,9 @@ const Controls: React.FC<any> = ({
                     <div ref={infoPanelRef} className="bg-white/10 p-5 rounded-lg max-w-lg focus-within:bg-white/90 focus-within:text-black transition-colors duration-300">
                         <h1 tabIndex={0} className="text-2xl font-bold focusable outline-none">{title}</h1>
                         <p className="text-base mt-1">{subtitle}</p>
+                        {description && (
+                            <p className="text-sm mt-2 text-zinc-300 line-clamp-3 leading-snug">{description}</p>
+                        )}
                     </div>
 
                     {/* Right Controls Panel */}
