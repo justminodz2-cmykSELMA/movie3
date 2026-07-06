@@ -30,6 +30,7 @@ import { PlayerProvider } from './contexts/PlayerContext';
 import { ToastContainer, DetailsModal, TVCursor } from './components/common';
 import PipPlayer from './components/PipPlayer';
 import { useTranslation } from './contexts/LanguageContext';
+import { consumeSystemUpdatedNotice } from './services/cacheReset';
 
 const GenericPageWrapper: React.FC<{ pageType: 'favorites' | 'search' | 'all' }> = ({ pageType }) => {
   const { t } = useTranslation();
@@ -39,6 +40,21 @@ const GenericPageWrapper: React.FC<{ pageType: 'favorites' | 'search' | 'all' }>
     all: t('allCategory'),
   }
   return <GenericPage pageType={pageType} title={pageTitles[pageType]} />;
+};
+
+// Shows a simple one-time "System updated" toast right after the one-time
+// local cache reset ran (see services/cacheReset.ts).
+const SystemUpdateNotice: React.FC = () => {
+  const { setToast } = useProfile();
+  useEffect(() => {
+    if (consumeSystemUpdatedNotice()) {
+      const timer = window.setTimeout(() => {
+        setToast({ message: 'System updated', type: 'success' });
+      }, 1200);
+      return () => window.clearTimeout(timer);
+    }
+  }, [setToast]);
+  return null;
 };
 
 const GlobalModal: React.FC = () => {
@@ -247,6 +263,7 @@ const App: React.FC = () => {
             </PlayerProvider> 
           </HashRouter>
           <ToastContainer />
+          <SystemUpdateNotice />
         </AddonProvider>
       </ProfileProvider>
     </LanguageProvider>
