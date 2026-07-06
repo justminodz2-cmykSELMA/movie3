@@ -586,6 +586,9 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     // so jumping on the progress bar never triggers the ad pause.
     const mainWatchTimeRef = useRef(0);
     const lastMainTimeRef = useRef(0);
+    // TV perf: last time value pushed to React state, so the whole player
+    // tree re-renders ~2x/sec instead of on every timeupdate event.
+    const lastUiTimeRef = useRef(-1);
 
     const AD_SOURCES = [
         "https://media.w3.org/2010/05/sintel/trailer.mp4?utm_source=chatgpt.com",
@@ -1308,7 +1311,13 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 video.pause();
                 return;
             }
-            setCurrentTime(video.currentTime);
+            // TV perf: throttle state updates (~2x/sec). Subtitles are cue-event
+            // driven and all logic below reads video.currentTime directly, so
+            // nothing else is affected — only fewer full re-renders.
+            if (Math.abs(video.currentTime - lastUiTimeRef.current) >= 0.4) {
+                lastUiTimeRef.current = video.currentTime;
+                setCurrentTime(video.currentTime);
+            }
 
             // Accumulate only continuously-watched time. Large jumps (seeks)
             // are excluded so moving on the progress bar never pauses playback.

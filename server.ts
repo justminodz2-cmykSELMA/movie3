@@ -1021,6 +1021,76 @@ app.use((req, res, next) => {
     return out;
   }
 
+  // ----------------------------------------------------------
+  // EXTRA SOURCE: MovieBox subtitles (subtitles ONLY, never video).
+  // Fetched in parallel with OpenSubtitles and appended after them,
+  // so if OpenSubtitles has nothing for a language MovieBox may fill it.
+  // Purely additive — never throws, empty list on any failure.
+  // ----------------------------------------------------------
+  const VS_MB_SCRAPER_URL = "https://p01--movie--lk5qxsd2bfgp.code.run/scrape";
+  const VS_MB_LANG_MAP: Record<string, string> = {
+    "اَلْعَرَبِيَّةُ": "Arabic", arabic: "Arabic", arbic: "Arabic", ar: "Arabic",
+    english: "English", englsh: "English", en: "English",
+    "français": "French", french: "French", fr: "French",
+    spanish: "Spanish", es: "Spanish", "es-la": "Spanish", "es-es": "Spanish",
+    german: "German", de: "German", italian: "Italian", it: "Italian",
+    "português": "Portuguese", portuguese: "Portuguese", pt: "Portuguese",
+    russian: "Russian", ru: "Russian", turkish: "Turkish", tr: "Turkish",
+  };
+
+  // Resolve the English title from TMDB (cached — it never changes).
+  const vsTitleCache = new Map<string, string | null>();
+  async function vsGetTitle(type: string, tmdb_id: string): Promise<string | null> {
+    const key = `vstitle:${type}:${tmdb_id}`;
+    if (vsTitleCache.has(key)) return vsTitleCache.get(key) ?? null;
+    let title: string | null = null;
+    try {
+      const r = await fetch(
+        `https://api.themoviedb.org/3/${type === "tv" ? "tv" : "movie"}/${tmdb_id}?api_key=${VS_TMDB_KEY}&language=en-US`,
+        { signal: AbortSignal.timeout(6000) }
+      );
+      if (r.ok) {
+        const d: any = await r.json();
+        const t = type === "tv" ? d?.name : d?.title;
+        title = typeof t === "string" && t.trim() ? t.trim() : null;
+      }
+    } catch {}
+    vsTitleCache.set(key, title);
+    return title;
+  }
+
+  async function vsSubsFromMovieBox(type: string, tmdb_id: string, season?: number, episode?: number): Promise<VsSub[]> {
+    const title = await vsGetTitle(type, tmdb_id);
+    if (!title) return [];
+    const params = new URLSearchParams();
+    params.append("provider", "moviebox");
+    params.append("type", type === "tv" ? "series" : "movie");
+    params.append("title", title);
+    if (type === "tv") {
+      if (season != null) params.append("season", String(season));
+      if (episode != null) params.append("episode", String(episode));
+    }
+    const res = await fetch(`${VS_MB_SCRAPER_URL}?${params.toString()}`, {
+      headers: { "ngrok-skip-browser-warning": "true" },
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!res.ok) throw new Error(`MovieBox ${res.status}`);
+    const data: any = await res.json();
+    const subs = Array.isArray(data?.subtitles) ? data.subtitles : [];
+    const perLang = new Map<string, number>();
+    const out: VsSub[] = [];
+    for (const s of subs) {
+      if (!s || !s.url) continue;
+      const raw = String(s.lang || "").trim();
+      const label = VS_MB_LANG_MAP[raw.toLowerCase()] || VS_MB_LANG_MAP[raw] || (raw || "Sub");
+      const n = perLang.get(label) || 0;
+      if (n >= VS_SUB_MAX_PER_LANG) continue;
+      perLang.set(label, n + 1);
+      out.push({ lang: label, url: String(s.url) });
+    }
+    return out;
+  }
+
   // Fetch default subtitles (cached). Never throws — an empty list simply
   // means the player falls back to whatever the stream provider scraped.
   async function vsFetchDefaultSubs(type: string, tmdb_id: string, season?: number, episode?: number): Promise<VsSub[]> {
@@ -1038,6 +1108,12 @@ app.use((req, res, next) => {
       } catch {}
     }
     let subs: VsSub[] = [];
+    // MovieBox subtitles are fetched IN PARALLEL with OpenSubtitles so they
+    // add no extra latency; they are appended AFTER the current sources.
+    const movieBoxPromise = vsSubsFromMovieBox(type, tmdb_id, season, episode).catch((e: any) => {
+      console.warn(`[VS subs] MovieBox failed (${e.message})`);
+      return [] as VsSub[];
+    });
     try {
       const imdb = await vsGetImdbId(type, tmdb_id);
       if (imdb) {
@@ -1052,6 +1128,16 @@ app.use((req, res, next) => {
           } catch (e: any) {
             console.warn(`[VS subs] mirror failed (${e.message})`);
           }
+        }
+      }
+    } catch {}
+    // Append MovieBox subs (deduped by URL) after the current sources.
+    try {
+      const mbSubs = await movieBoxPromise;
+      if (mbSubs.length) {
+        const seen = new Set(subs.map((s) => s.url));
+        for (const s of mbSubs) {
+          if (!seen.has(s.url)) { seen.add(s.url); subs.push(s); }
         }
       }
     } catch {}
