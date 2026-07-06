@@ -681,35 +681,58 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         // Android TV / WebOS / Tizen browsers still require.
         adVid.setAttribute('webkit-playsinline', '');
         adVid.setAttribute('playsinline', '');
+        adVid.setAttribute('x5-playsinline', '');
 
+        adVid.defaultMuted = true;
+        adVid.muted = true;
         adVid.src = AD_SOURCES[adState.adIndex];
         adVid.load();
-        // ALWAYS start muted: muted autoplay is the only playback that is
-        // universally allowed on TV WebViews (unmuted play() is silently
-        // blocked there even after a user gesture on another element).
-        adVid.muted = true;
-        const playPromise = adVid.play();
-        if (playPromise && typeof playPromise.then === 'function') {
-            playPromise
-                .then(() => {
-                    // Playback started muted — now TRY to unmute. If the TV
-                    // blocks it, stay muted rather than not playing at all.
-                    try { adVid.muted = false; } catch { /* keep muted */ }
-                })
-                .catch(() => {
-                    // Even muted play was rejected (rare). Retry once shortly:
-                    // some TV WebViews reject the first play() while the
-                    // element is still attaching to the hardware decoder.
-                    setTimeout(() => {
-                        try {
-                            adVid.muted = true;
-                            adVid.play().catch(e => console.error("Failed to play ad:", e));
-                        } catch { /* watchdogs will recover */ }
-                    }, 500);
-                });
-        }
+        let cancelled = false;
+
+        const tryUnmute = () => {
+            // Playback started muted; now TRY to unmute. Some TVs silently
+            // PAUSE the video when unmuted programmatically, so verify playback
+            // survived and revert to muted rather than not playing at all.
+            try {
+                adVid.muted = false;
+                setTimeout(() => {
+                    if (cancelled) return;
+                    if (adVid.paused) {
+                        adVid.muted = true;
+                        adVid.play().catch(() => {});
+                    }
+                }, 300);
+            } catch { /* keep muted */ }
+        };
+
+        const attemptPlay = () => {
+            if (cancelled) return;
+            // ALWAYS (re)start muted: muted autoplay is the only playback that
+            // is universally allowed on TV WebViews (unmuted play() is silently
+            // blocked there even after a user gesture on another element).
+            adVid.muted = true;
+            const p = adVid.play();
+            if (p && typeof p.then === 'function') {
+                p.then(tryUnmute).catch(() => { /* kick loop below recovers */ });
+            } else {
+                tryUnmute();
+            }
+        };
+
+        attemptPlay();
+
+        // TV WebViews often reject/ignore the first play() while the element is
+        // still attaching to the hardware decoder. Keep kicking playback every
+        // 2s until real frames render (the per-ad watchdog gives up after 10s,
+        // so this never loops forever).
+        const kickTimer = setInterval(() => {
+            if (cancelled || adVideoStartedRef.current) return;
+            attemptPlay();
+        }, 2000);
 
         return () => {
+            cancelled = true;
+            clearInterval(kickTimer);
             adVid.pause();
             adVid.removeAttribute('src');
             adVid.load();
@@ -2087,14 +2110,12 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 <div className="absolute inset-0 z-[100] bg-black">
                     <video 
                         ref={adVideoRef}
-                        // TV WebViews composite <video> in a hardware overlay that
-                        // IGNORES CSS opacity, so opacity tricks can't hide their gray
-                        // poster + play icon. Instead, keep the element physically
-                        // 1x1 px (invisible) until real frames are rendering, then
-                        // expand it to full screen.
-                        className={adVideoStarted
-                            ? 'w-full h-full object-cover'
-                            : 'absolute bottom-0 right-0 w-px h-px opacity-0 pointer-events-none'}
+                        // Keep the ad video FULL-SIZE from the very start: TV WebViews
+                        // refuse to start decoding an invisible / 1x1 px <video>,
+                        // which deadlocked the ad on TVs (it played fine on PC).
+                        // The browser gray placeholder is hidden by the opaque
+                        // black cover below (z-[105]) until real frames render.
+                        className="w-full h-full object-cover"
                         autoPlay
                         muted
                         playsInline
@@ -2106,9 +2127,16 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                             setAdVideoStarted(true);
                         }}
                         onLoadedData={() => {
-                            // TV WebViews sometimes never fire `playing` — a decoded
+                            // TV WebViews sometimes never fire `playing`: a decoded
                             // first frame is an equally valid "ad is alive" signal.
                             anyAdStartedRef.current = true;
+                        }}
+                        onCanPlay={(e) => {
+                            // Data is ready: if the TV ignored the initial play()
+                            // call, kick playback again right now (muted).
+                            anyAdStartedRef.current = true;
+                            const v = e.target as HTMLVideoElement;
+                            if (v.paused) { v.muted = true; v.play().catch(() => {}); }
                         }}
                         onTimeUpdate={(e) => {
                             const target = e.target as HTMLVideoElement;
