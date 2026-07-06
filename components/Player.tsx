@@ -693,7 +693,9 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     }, [subtitles, addonSubtitles]);
     const [activeCues, setActiveCues] = useState<VTTCue[]>([]);
     const defaultSubtitleSettings: SubtitleSettings = { fontSize: 100, backgroundOpacity: 0, edgeStyle: 'outline', verticalPosition: 10, timingOffset: 0 };
-    const [subtitleSettings, setSubtitleSettings] = useState<SubtitleSettings>(() => getScreenSpecificData('subtitleSettings', defaultSubtitleSettings));
+    // Time Offset is intentionally NOT restored from saved settings: the right
+    // offset differs from video to video, so every playback starts at 0.
+    const [subtitleSettings, setSubtitleSettings] = useState<SubtitleSettings>(() => ({ ...getScreenSpecificData('subtitleSettings', defaultSubtitleSettings), timingOffset: 0 }));
     
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
     const [showSubtitlesPanel, setShowSubtitlesPanel] = useState(false);
@@ -790,7 +792,9 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const handleSubtitleSettingsChange = (newSettings: Partial<SubtitleSettings>) => {
         setSubtitleSettings(prev => {
             const updated = { ...prev, ...newSettings };
-            setScreenSpecificData('subtitleSettings', updated);
+            // Never persist the Time Offset — it varies per video, so the
+            // saved settings always keep the default of 0.
+            setScreenSpecificData('subtitleSettings', { ...updated, timingOffset: 0 });
             return updated;
         });
     };
