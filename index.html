@@ -189,7 +189,6 @@
       /* Promote to a GPU layer only while actually interacting — keeping
          will-change on every card permanently forces one compositor layer
          per card, which exhausts memory on TVs. Visual result is identical. */
-      .interactive-card-container:hover .interactive-card,
       .interactive-card-container:focus-within .interactive-card {
         will-change: transform;
       }
@@ -205,23 +204,9 @@
         padding-bottom: 0;
       }
 
-      .interactive-card-container:hover {
-        z-index: 20;
-      }
-      .interactive-card-container:hover .interactive-card {
-        transform: scale(1.05) translateY(-15%);
-        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
-      }
-      .interactive-card-container:hover .quick-view {
-        opacity: 1;
-        max-height: 150px;
-        padding-top: 0.75rem;
-        padding-bottom: 0.75rem;
-      }
-      .interactive-card-container:hover .interactive-card img {
-        border-bottom-left-radius: 0;
-        border-bottom-right-radius: 0;
-      }
+      /* Mouse hover no longer scales the card or opens the Netflix-style
+         quick-view panel. Keyboard/remote focus (arrow keys) keeps its
+         white border + title behavior, handled by the .focusable styles. */
       
       /* Button Active State */
       .btn-press {
