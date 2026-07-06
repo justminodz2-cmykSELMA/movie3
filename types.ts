@@ -214,6 +214,7 @@ declare global {
         events?: {
           onReady?: (event: { target: YTPlayer }) => void;
           onStateChange?: (event: { data: number }) => void;
+          onError?: (event: { data: number }) => void;
         };
       }) => YTPlayer;
       PlayerState: {

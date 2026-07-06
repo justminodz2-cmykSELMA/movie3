@@ -617,24 +617,109 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     // tree re-renders ~2x/sec instead of on every timeupdate event.
     const lastUiTimeRef = useRef(-1);
 
+    // NOTE: Ad sources MUST be permanent, CORS-friendly, non-IP-locked MP4 URLs.
+    // Never use signed/expiring links (e.g. googlevideo.com) — they only play on
+    // the machine/IP they were generated for and silently fail on TVs.
     const AD_SOURCES = [
-        "https://media.w3.org/2010/05/sintel/trailer.mp4?utm_source=chatgpt.com",
-        "https://rr7---sn-5abxgpxuxaxjvh-j1ae.googlevideo.com/videoplayback?expire=1782862368&ei=wP1DaqvSBoiUhcIPlcLe-Ak&ip=41.110.126.207&id=o-APwaxZfkaXGtmisLipcLXVwclVeNY9vBGaYd31WK14Kl&itag=299&source=youtube&requiressl=yes&xpc=EgVo2aDSNQ%3D%3D&cps=292&met=1782840768%2C&mh=jE&mm=31%2C29&mn=sn-5abxgpxuxaxjvh-j1ae%2Csn-h5q7kned&ms=au%2Crdu&mv=m&mvi=7&pl=23&rms=au%2Cau&initcwndbps=576250&bui=ARmQxEVIX3PNIEFF_DhnLzxuOLPXFfqs-xOSRkwqBbLS1hQa2h7VWax4hSiXONifCUaH-IlC9FaSsufB&spc=SQ-umurvU3ICwW_HuF7-WyjTZ8_5Miw30lGI0-TykhC-&vprv=1&svpuc=1&mime=video%2Fmp4&rqh=1&gir=yes&clen=35473092&dur=153.340&lmt=1767239705822326&mt=1782840292&fvip=4&keepalive=yes&fexp=51565116%2C51565681%2C52017147&c=ANDROID_VR&txp=5532534&sparams=expire%2Cei%2Cip%2Cid%2Citag%2Csource%2Crequiressl%2Cxpc%2Cbui%2Cspc%2Cvprv%2Csvpuc%2Cmime%2Crqh%2Cgir%2Cclen%2Cdur%2Clmt&sig=AHEqNM4wRQIgNESy7wlWJYfnje061LjDWs975tOYegZfvtStDJDwjI4CIQC79f6WqlxpGmyHxGjGywZZeRc7OU2cImEOWv5Mfl2ooQ%3D%3D&lsparams=cps%2Cmet%2Cmh%2Cmm%2Cmn%2Cms%2Cmv%2Cmvi%2Cpl%2Crms%2Cinitcwndbps&lsig=APaTxxMwRQIgYKzfybAHaDpnDDjXm80r6kAl3jp4S4yPHuk0kwEIW1oCIQCLdayw-aw7gvDdAdZ96mtDVKOyrPI6JKET9LkYkJAsOg%3D%3D&cpn=zAw7EOY6o-kd4JSJ"
+        "https://media.w3.org/2010/05/sintel/trailer.mp4",
+        "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
     ];
 
+    // Whether the CURRENT ad video has actually started rendering frames.
+    // Until then the ad <video> stays invisible (black screen + spinner), so
+    // TV browsers never show their default gray poster with a play icon.
+    const [adVideoStarted, setAdVideoStarted] = useState(false);
+    const adVideoStartedRef = useRef(false);
+    // Whether ANY ad started playing in this ad break (for the 30s watchdog).
+    const anyAdStartedRef = useRef(false);
+
+    // Ends the whole ad break and resumes the main video, restoring TV focus.
+    const finishAds = useCallback(() => {
+        if (!adStateRef.current.isActive) return;
+        setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
+        setAdVideoStarted(false);
+        videoRef.current?.play().catch(() => {});
+        // Explicitly focus a player control button so focus is never lost on TV
+        setTimeout(() => {
+            const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
+            if (controlsFocusables.length > 0) {
+                controlsFocusables[0].focus({ preventScroll: true });
+            } else if (progressBarRef.current) {
+                progressBarRef.current.focus({ preventScroll: true });
+            }
+            setIsOverlayVisible(true);
+        }, 100);
+    }, []);
+
+    // Advances to the next ad, or ends the break if this was the last one.
+    const goToNextAdOrFinish = useCallback(() => {
+        if (adStateRef.current.adIndex < AD_SOURCES.length - 1) {
+            setAdVideoStarted(false);
+            setAdState(prev => ({
+                ...prev,
+                adIndex: prev.adIndex + 1,
+                canSkip: false,
+                skipCountdown: 5,
+                adProgress: 0
+            }));
+        } else {
+            finishAds();
+        }
+    }, [finishAds]);
+
+    // Load + autoplay the current ad. Setting src imperatively (instead of via
+    // JSX) avoids a React/cleanup race that used to strip the src right after
+    // switching to the next ad, freezing the player.
     useEffect(() => {
         const adVid = adVideoRef.current;
-        if (adState.isActive && adVid) {
+        if (!adState.isActive || !adVid) return;
+
+        adVideoStartedRef.current = false;
+        setAdVideoStarted(false);
+
+        adVid.src = AD_SOURCES[adState.adIndex];
+        adVid.load();
+        adVid.muted = false;
+        adVid.play().catch(() => {
+            // TVs/WebViews often block unmuted programmatic playback.
+            // Retry muted — muted autoplay is always allowed.
+            adVid.muted = true;
             adVid.play().catch(e => console.error("Failed to play ad:", e));
-        }
+        });
+
         return () => {
-            if (adVid) {
-                adVid.pause();
-                adVid.removeAttribute('src');
-                adVid.load();
-            }
+            adVid.pause();
+            adVid.removeAttribute('src');
+            adVid.load();
         };
     }, [adState.isActive, adState.adIndex]);
+
+    // Per-ad watchdog: if the current ad hasn't started rendering within 10s,
+    // move on to the next ad (or end the break) instead of hanging forever.
+    useEffect(() => {
+        if (!adState.isActive) return;
+        const perAdTimer = setTimeout(() => {
+            if (!adVideoStartedRef.current) {
+                console.warn("Ad did not start within 10s, moving on");
+                goToNextAdOrFinish();
+            }
+        }, 10000);
+        return () => clearTimeout(perAdTimer);
+    }, [adState.isActive, adState.adIndex, goToNextAdOrFinish]);
+
+    // Global watchdog: if NO ad managed to start playing within 30s of the ad
+    // break beginning, remove the ads entirely and resume the movie/episode.
+    useEffect(() => {
+        if (!adState.isActive) return;
+        anyAdStartedRef.current = false;
+        const globalTimer = setTimeout(() => {
+            if (!anyAdStartedRef.current) {
+                console.warn("No ad started within 30s, removing ad break");
+                finishAds();
+            }
+        }, 30000);
+        return () => clearTimeout(globalTimer);
+    }, [adState.isActive, finishAds]);
 
     const [showAutoSkipAlert, setShowAutoSkipAlert] = useState(false);
     const [isAutoSkipAlertExiting, setIsAutoSkipAlertExiting] = useState(false);
@@ -661,20 +746,8 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const triggerAdAutoSkip = useCallback(() => {
         if (adStateRef.current.isActive) {
             console.log("Ad auto-skipped after 30 seconds of continuous playback");
-            
-            setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
-            videoRef.current?.play().catch(()=>{});
 
-            // Explicitly focus player controls so focus is not lost on TV
-            setTimeout(() => {
-                const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
-                if (controlsFocusables.length > 0) {
-                    controlsFocusables[0].focus({ preventScroll: true });
-                } else if (progressBarRef.current) {
-                    progressBarRef.current.focus({ preventScroll: true });
-                }
-                setIsOverlayVisible(true);
-            }, 100);
+            finishAds();
 
             setShowAutoSkipAlert(true);
             setIsAutoSkipAlertExiting(false);
@@ -687,7 +760,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 }, 400);
             }, 4000);
         }
-    }, []);
+    }, [finishAds]);
 
 
 
@@ -1992,10 +2065,18 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 <div className="absolute inset-0 z-[100] bg-black">
                     <video 
                         ref={adVideoRef}
-                        className="w-full h-full object-cover"
+                        // Stay fully invisible until real frames are rendering, so TV
+                        // browsers never show their gray default poster + play icon.
+                        className={`w-full h-full object-cover transition-opacity duration-300 ${adVideoStarted ? 'opacity-100' : 'opacity-0'}`}
                         autoPlay
                         playsInline
-                        src={AD_SOURCES[adState.adIndex]}
+                        preload="auto"
+                        poster="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='9'%3E%3Crect%20width='16'%20height='9'%20fill='black'/%3E%3C/svg%3E"
+                        onPlaying={() => {
+                            adVideoStartedRef.current = true;
+                            anyAdStartedRef.current = true;
+                            setAdVideoStarted(true);
+                        }}
                         onTimeUpdate={(e) => {
                             const target = e.target as HTMLVideoElement;
                             const adDur = target.duration || 1;
@@ -2023,47 +2104,20 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                         onError={() => {
                             // If an ad fails to load, never freeze playback:
                             // try the next ad, or end ads and resume the video.
-                            if (adState.adIndex < AD_SOURCES.length - 1) {
-                                setAdState(prev => ({
-                                    ...prev,
-                                    adIndex: prev.adIndex + 1,
-                                    canSkip: false,
-                                    skipCountdown: 5,
-                                    adProgress: 0
-                                }));
-                            } else {
-                                setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
-                                videoRef.current?.play().catch(()=>{});
-                            }
+                            goToNextAdOrFinish();
                         }}
                         onEnded={() => {
-                            if (adState.adIndex < AD_SOURCES.length - 1) {
-                                // Next Ad
-                                setAdState(prev => ({
-                                    ...prev,
-                                    adIndex: prev.adIndex + 1,
-                                    canSkip: false,
-                                    skipCountdown: 5,
-                                    adProgress: 0
-                                }));
-                            } else {
-                                // End of all ads
-                                setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
-                                videoRef.current?.play().catch(()=>{});
-
-                                // Explicitly focus a player control button so focus is never lost
-                                setTimeout(() => {
-                                    const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
-                                    if (controlsFocusables.length > 0) {
-                                        controlsFocusables[0].focus({ preventScroll: true });
-                                    } else if (progressBarRef.current) {
-                                        progressBarRef.current.focus({ preventScroll: true });
-                                    }
-                                    setIsOverlayVisible(true);
-                                }, 100);
-                            }
+                            goToNextAdOrFinish();
                         }}
                     />
+
+                    {/* Loading state: plain black + spinner while the ad buffers,
+                        instead of the TV browser's gray placeholder */}
+                    {!adVideoStarted && (
+                        <div className="absolute inset-0 z-[105] bg-black flex items-center justify-center">
+                            <div className="w-14 h-14 border-4 border-t-transparent border-white/70 rounded-full animate-spin"></div>
+                        </div>
+                    )}
                     
                     {/* SKIP Button */}
                     <button 
@@ -2072,20 +2126,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                         onClick={(e) => {
                             e.stopPropagation();
                             if (adState.canSkip) {
-                                // End of all ads
-                                setAdState(prev => ({ ...prev, isActive: false, hasPlayedInSession: true }));
-                                videoRef.current?.play().catch(()=>{});
-
-                                // Explicitly focus a player control button so focus is never lost
-                                setTimeout(() => {
-                                    const controlsFocusables = Array.from(controlsPanelRef.current?.querySelectorAll('.focusable') || []) as HTMLElement[];
-                                    if (controlsFocusables.length > 0) {
-                                        controlsFocusables[0].focus({ preventScroll: true });
-                                    } else if (progressBarRef.current) {
-                                        progressBarRef.current.focus({ preventScroll: true });
-                                    }
-                                    setIsOverlayVisible(true);
-                                }, 100);
+                                finishAds();
                             }
                         }}
                     >

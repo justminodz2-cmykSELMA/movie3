@@ -133,7 +133,11 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
 
     // Ad state
     const [showAd, setShowAd] = useState(false);
+    // True only once the trailer is ACTUALLY playing. Until then the backdrop
+    // image stays visible, so TVs never show a gray placeholder + play icon.
+    const [isAdPlaying, setIsAdPlaying] = useState(false);
     const [isAdMuted, setIsAdMuted] = useState(true);
+    const adEverPlayedRef = useRef(false);
     const playerRef = useRef<YTPlayer | null>(null);
     const playerContainerId = useMemo(() => `details-modal-player-${item.id}-${Math.random().toString(36).substring(7)}`, [item.id]);
 
@@ -195,14 +199,38 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                     setIsAdMuted(true);
                     event.target.playVideo();
                 },
+                onStateChange: (event: { data: number }) => {
+                    // 1 === YT.PlayerState.PLAYING: reveal the trailer only now
+                    if (event.data === 1) {
+                        adEverPlayedRef.current = true;
+                        setIsAdPlaying(true);
+                    }
+                },
+                onError: () => {
+                    // Trailer failed (blocked/unavailable on this device):
+                    // silently fall back to the backdrop image.
+                    setShowAd(false);
+                    setIsAdPlaying(false);
+                },
             }
         });
 
+        // Watchdog: if the trailer never starts within 30s (common on TVs),
+        // remove it and keep the clean backdrop image instead.
+        const watchdog = setTimeout(() => {
+            if (!adEverPlayedRef.current) {
+                setShowAd(false);
+                setIsAdPlaying(false);
+            }
+        }, 30000);
+
         return () => {
+            clearTimeout(watchdog);
             if (player && typeof player.destroy === 'function') {
                 player.destroy();
             }
             playerRef.current = null;
+            setIsAdPlaying(false);
         };
     }, [showAd, details, playerContainerId, isYtApiReady]);
 
@@ -495,18 +523,19 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                         </div>
                         <div ref={scrollContainerRef} className="w-full h-full overflow-y-auto no-scrollbar">
                             <div className="relative w-full h-[56.25%] min-h-[250px] md:min-h-[400px] overflow-hidden">
+                                {/* Backdrop stays as the base layer: no gray placeholder can
+                                    ever be visible while the trailer loads (or if it fails). */}
+                                <img
+                                    src={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${details.backdrop_path}`}
+                                    alt={details.title || details.name}
+                                    className="absolute inset-0 object-cover w-full h-full"
+                                />
                                 {showAd && details.videos?.results?.length ? (
                                     <div
                                         id={playerContainerId}
-                                        className="absolute top-1/2 left-1/2 w-full h-full transform -translate-x-1/2 -translate-y-1/2 scale-125"
+                                        className={`absolute top-1/2 left-1/2 w-full h-full transform -translate-x-1/2 -translate-y-1/2 scale-125 transition-opacity duration-500 ${isAdPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
                                     />
-                                ) : (
-                                    <img
-                                        src={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${details.backdrop_path}`}
-                                        alt={details.title || details.name}
-                                        className="absolute inset-0 object-cover w-full h-full"
-                                    />
-                                )}
+                                ) : null}
                                 <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/70 to-transparent"></div>
                                 <div className="absolute bottom-8 left-8 z-10 max-w-[70%]">
                                     {logoUrl ? (
@@ -525,7 +554,7 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                                         <button onClick={() => toggleFavorite(details)} className={`w-11 h-11 flex items-center justify-center rounded-full border-2 border-zinc-400 text-white text-xl btn-press hover:border-white focusable`} data-focus-group="main-actions" data-focus-index="1">
                                             <i className={`fas ${isFav ? 'fa-check' : 'fa-plus'}`}></i>
                                         </button>
-                                        {showAd && details.videos?.results && (
+                                        {showAd && isAdPlaying && details.videos?.results && (
                                             <button 
                                                 onClick={handleToggleAdMute} 
                                                 className="w-11 h-11 flex items-center justify-center rounded-full border-2 border-zinc-400 text-white text-xl btn-press hover:border-white focusable"
