@@ -146,6 +146,7 @@ export interface SubtitleSettings {
   backgroundOpacity: number;
   edgeStyle: 'none' | 'drop-shadow' | 'outline';
   verticalPosition: number;
+  timingOffset?: number;
 }
 
 export interface VideoFilters {

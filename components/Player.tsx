@@ -479,6 +479,22 @@ const SettingsPanel: React.FC<{
                 </div>
             </div>
 
+            {/* Subtitle Timing Offset */}
+            <div className="mb-2">
+                <h4 className="text-sm font-semibold text-zinc-400 mb-2">{t('timeOffset')}</h4>
+                <div className="flex flex-wrap gap-2">
+                    <button onClick={() => onSubtitleSettingsChange({ timingOffset: Math.max(-30, Math.round(((subtitleSettings.timingOffset ?? 0) - 0.5) * 10) / 10) })} className="px-4 py-2 text-sm font-medium rounded-md hover:bg-white/10 transition-colors flex-1 text-center bg-white/5">
+                        −0.5s
+                    </button>
+                    <button onClick={() => onSubtitleSettingsChange({ timingOffset: 0 })} className={`px-4 py-2 text-sm font-bold rounded-md hover:bg-white/10 transition-colors flex-1 text-center ${(subtitleSettings.timingOffset ?? 0) !== 0 ? 'bg-white text-black' : 'bg-white/5'}`}>
+                        {(subtitleSettings.timingOffset ?? 0) > 0 ? `+${subtitleSettings.timingOffset}s` : `${subtitleSettings.timingOffset ?? 0}s`}
+                    </button>
+                    <button onClick={() => onSubtitleSettingsChange({ timingOffset: Math.min(30, Math.round(((subtitleSettings.timingOffset ?? 0) + 0.5) * 10) / 10) })} className="px-4 py-2 text-sm font-medium rounded-md hover:bg-white/10 transition-colors flex-1 text-center bg-white/5">
+                        +0.5s
+                    </button>
+                </div>
+            </div>
+
             {/* Vertical Position */}
             <div className="mb-2">
                 <h4 className="text-sm font-semibold text-zinc-400 mb-2">{t('verticalPosition')}</h4>
@@ -676,7 +692,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         return merged;
     }, [subtitles, addonSubtitles]);
     const [activeCues, setActiveCues] = useState<VTTCue[]>([]);
-    const defaultSubtitleSettings: SubtitleSettings = { fontSize: 100, backgroundOpacity: 0, edgeStyle: 'outline', verticalPosition: 10 };
+    const defaultSubtitleSettings: SubtitleSettings = { fontSize: 100, backgroundOpacity: 0, edgeStyle: 'outline', verticalPosition: 10, timingOffset: 0 };
     const [subtitleSettings, setSubtitleSettings] = useState<SubtitleSettings>(() => getScreenSpecificData('subtitleSettings', defaultSubtitleSettings));
     
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
@@ -1235,6 +1251,33 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
         return () => { if (activeTrack) activeTrack.removeEventListener('cuechange', onCueChange); };
     }, [activeSubtitleLang, vttTracks, aiVttTracks]);
+
+    // Subtitle timing offset (+/-): shifts every cue by the configured amount.
+    // Original times are remembered on each cue, so the offset is always
+    // applied from the true baseline and can be changed or reset at any time.
+    useEffect(() => {
+        const video = videoRef.current;
+        if (!video || !video.textTracks) return;
+        const offset = subtitleSettings.timingOffset ?? 0;
+        const applyOffset = () => {
+            for (let i = 0; i < video.textTracks.length; i++) {
+                const cues = video.textTracks[i].cues;
+                if (!cues) continue;
+                for (let j = 0; j < cues.length; j++) {
+                    const cue = cues[j] as VTTCue & { _origStart?: number; _origEnd?: number };
+                    if (cue._origStart === undefined) { cue._origStart = cue.startTime; cue._origEnd = cue.endTime; }
+                    const newStart = Math.max(0, cue._origStart + offset);
+                    const newEnd = Math.max(newStart + 0.1, (cue._origEnd ?? cue.endTime) + offset);
+                    if (cue.startTime !== newStart) cue.startTime = newStart;
+                    if (cue.endTime !== newEnd) cue.endTime = newEnd;
+                }
+            }
+        };
+        applyOffset();
+        // Cues can load asynchronously after tracks mount, so retry briefly.
+        const timers = [setTimeout(applyOffset, 500), setTimeout(applyOffset, 2000)];
+        return () => timers.forEach(clearTimeout);
+    }, [subtitleSettings.timingOffset, activeSubtitleLang, vttTracks, aiVttTracks]);
 
     useEffect(() => {
         if (userLanguage === 'ar' && vttTracks.length > 0) {
