@@ -677,15 +677,37 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         adVideoStartedRef.current = false;
         setAdVideoStarted(false);
 
+        // TV WebView compatibility: legacy inline-playback attributes that some
+        // Android TV / WebOS / Tizen browsers still require.
+        adVid.setAttribute('webkit-playsinline', '');
+        adVid.setAttribute('playsinline', '');
+
         adVid.src = AD_SOURCES[adState.adIndex];
         adVid.load();
-        adVid.muted = false;
-        adVid.play().catch(() => {
-            // TVs/WebViews often block unmuted programmatic playback.
-            // Retry muted — muted autoplay is always allowed.
-            adVid.muted = true;
-            adVid.play().catch(e => console.error("Failed to play ad:", e));
-        });
+        // ALWAYS start muted: muted autoplay is the only playback that is
+        // universally allowed on TV WebViews (unmuted play() is silently
+        // blocked there even after a user gesture on another element).
+        adVid.muted = true;
+        const playPromise = adVid.play();
+        if (playPromise && typeof playPromise.then === 'function') {
+            playPromise
+                .then(() => {
+                    // Playback started muted — now TRY to unmute. If the TV
+                    // blocks it, stay muted rather than not playing at all.
+                    try { adVid.muted = false; } catch { /* keep muted */ }
+                })
+                .catch(() => {
+                    // Even muted play was rejected (rare). Retry once shortly:
+                    // some TV WebViews reject the first play() while the
+                    // element is still attaching to the hardware decoder.
+                    setTimeout(() => {
+                        try {
+                            adVid.muted = true;
+                            adVid.play().catch(e => console.error("Failed to play ad:", e));
+                        } catch { /* watchdogs will recover */ }
+                    }, 500);
+                });
+        }
 
         return () => {
             adVid.pause();
@@ -2065,10 +2087,16 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 <div className="absolute inset-0 z-[100] bg-black">
                     <video 
                         ref={adVideoRef}
-                        // Stay fully invisible until real frames are rendering, so TV
-                        // browsers never show their gray default poster + play icon.
-                        className={`w-full h-full object-cover transition-opacity duration-300 ${adVideoStarted ? 'opacity-100' : 'opacity-0'}`}
+                        // TV WebViews composite <video> in a hardware overlay that
+                        // IGNORES CSS opacity, so opacity tricks can't hide their gray
+                        // poster + play icon. Instead, keep the element physically
+                        // 1x1 px (invisible) until real frames are rendering, then
+                        // expand it to full screen.
+                        className={adVideoStarted
+                            ? 'w-full h-full object-cover'
+                            : 'absolute bottom-0 right-0 w-px h-px opacity-0 pointer-events-none'}
                         autoPlay
+                        muted
                         playsInline
                         preload="auto"
                         poster="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='9'%3E%3Crect%20width='16'%20height='9'%20fill='black'/%3E%3C/svg%3E"
@@ -2077,8 +2105,20 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                             anyAdStartedRef.current = true;
                             setAdVideoStarted(true);
                         }}
+                        onLoadedData={() => {
+                            // TV WebViews sometimes never fire `playing` — a decoded
+                            // first frame is an equally valid "ad is alive" signal.
+                            anyAdStartedRef.current = true;
+                        }}
                         onTimeUpdate={(e) => {
                             const target = e.target as HTMLVideoElement;
+                            // Extra "started" signal for TV WebViews that never fire
+                            // `playing`: if time is advancing, the ad IS playing.
+                            if (!adVideoStartedRef.current && target.currentTime > 0.1) {
+                                adVideoStartedRef.current = true;
+                                anyAdStartedRef.current = true;
+                                setAdVideoStarted(true);
+                            }
                             const adDur = target.duration || 1;
                             const adCur = target.currentTime;
                             const pct = (adCur / adDur) * 100;
