@@ -46,17 +46,10 @@ const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; 
     const playerContainerId = useMemo(() => `poster-player-${movie.id}-${Math.random().toString(36).substring(2)}`, [movie.id]);
 
     const handleGlow = useCallback(() => {
-        if (window.cineStreamBgTimeoutId) {
-            clearTimeout(window.cineStreamBgTimeoutId);
-        }
-        window.cineStreamBgTimeoutId = window.setTimeout(() => {
-            if (movie.backdrop_path) {
-                const imageUrl = `${IMAGE_BASE_URL}w300${movie.backdrop_path}`;
-                document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-                document.body.classList.add('has-dynamic-bg');
-            }
-        }, 200);
-    }, [movie.backdrop_path]);
+        // Perf: dead work removed — this used to write an unused
+        // --dynamic-bg-image variable onto <body> (no CSS ever read it),
+        // forcing a full-page style recalculation on every card focus/hover.
+    }, []);
 
     const handleMouseEnter = useCallback(() => {
         // Mouse hover no longer triggers the trailer preview / quick-view panel.
@@ -175,7 +168,6 @@ const ContentRow: React.FC<{ title: string; movies: Movie[]; onCardClick: (movie
             clearTimeout(window.cineStreamBgTimeoutId);
             window.cineStreamBgTimeoutId = null;
         }
-        document.body.classList.remove('has-dynamic-bg');
     }, []);
     return (
         <div className="my-6 md:my-8" style={{ zIndex }} onMouseLeave={handleMouseLeaveList}>
@@ -272,17 +264,10 @@ const FilteredItemCard: React.FC<{ item: Movie; index: number }> = ({ item, inde
     const glowImageUrl = `${IMAGE_BASE_URL}w500${item.backdrop_path}`;
     
     const handleGlow = useCallback(() => {
-        if (window.cineStreamBgTimeoutId) {
-            clearTimeout(window.cineStreamBgTimeoutId);
-        }
-        window.cineStreamBgTimeoutId = window.setTimeout(() => {
-            if (item.backdrop_path) {
-                const imageUrl = `${IMAGE_BASE_URL}w300${item.backdrop_path}`;
-                document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-                document.body.classList.add('has-dynamic-bg');
-            }
-        }, 200);
-    }, [item.backdrop_path]);
+        // Perf: dead work removed — this used to write an unused
+        // --dynamic-bg-image variable onto <body> (no CSS ever read it),
+        // forcing a full-page style recalculation on every card focus/hover.
+    }, []);
 
     return (
         <div 
@@ -403,7 +388,6 @@ const TvShowsPage: React.FC = () => {
             clearTimeout(window.cineStreamBgTimeoutId);
             window.cineStreamBgTimeoutId = null;
         }
-        document.body.classList.remove('has-dynamic-bg');
     }, []);
 
     const handleOpenModal = (item: Movie) => setModalItem(item);

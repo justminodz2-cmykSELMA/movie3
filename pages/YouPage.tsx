@@ -129,17 +129,10 @@ const HistoryCard: React.FC<{ item: HistoryItem, index: number }> = ({ item, ind
     const timeAgo = `${index + 2} hour${index > 0 ? 's' : ''} ago`;
 
     const handleGlow = useCallback(() => {
-        if (window.cineStreamBgTimeoutId) {
-            clearTimeout(window.cineStreamBgTimeoutId);
-        }
-        window.cineStreamBgTimeoutId = window.setTimeout(() => {
-            if (item.itemImage) {
-                const imageUrl = item.itemImage.replace('w780', 'w300');
-                document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-                document.body.classList.add('has-dynamic-bg');
-            }
-        }, 200);
-    }, [item.itemImage]);
+        // Perf: dead work removed — this used to write an unused
+        // --dynamic-bg-image variable onto <body> (no CSS ever read it),
+        // forcing a full-page style recalculation on every card focus/hover.
+    }, []);
 
     return (
         <div 
@@ -188,7 +181,6 @@ export const YouPage: React.FC = () => {
             clearTimeout(window.cineStreamBgTimeoutId);
             window.cineStreamBgTimeoutId = null;
         }
-        document.body.classList.remove('has-dynamic-bg');
     }, []);
 
     if (!activeProfile) {

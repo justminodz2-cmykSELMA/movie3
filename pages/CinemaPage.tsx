@@ -18,17 +18,10 @@ const SpotlightCinemaCard: React.FC<{ item: Movie; index: number }> = ({ item, i
     const viewers = useMemo(() => Math.floor(Math.random() * 5000) + 100, [item.id]);
 
     const handleGlow = useCallback(() => {
-        if (window.cineStreamBgTimeoutId) {
-            clearTimeout(window.cineStreamBgTimeoutId);
-        }
-        window.cineStreamBgTimeoutId = window.setTimeout(() => {
-            if (item.backdrop_path) {
-                const imageUrl = `${IMAGE_BASE_URL}w300${item.backdrop_path}`;
-                document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-                document.body.classList.add('has-dynamic-bg');
-            }
-        }, 200);
-    }, [item.backdrop_path]);
+        // Perf: dead work removed — this used to write an unused
+        // --dynamic-bg-image variable onto <body> (no CSS ever read it),
+        // forcing a full-page style recalculation on every card focus/hover.
+    }, []);
 
     return (
         <div
@@ -76,7 +69,6 @@ const SpotlightCinemaRow: React.FC<{ title: string; items: Movie[] }> = ({ title
             clearTimeout(window.cineStreamBgTimeoutId);
             window.cineStreamBgTimeoutId = null;
         }
-        document.body.classList.remove('has-dynamic-bg');
     }, []);
     return (
         <div className="my-8" onMouseLeave={handleMouseLeaveList}>
@@ -106,17 +98,10 @@ const CinemaCard: React.FC<{ item: Movie; index: number }> = ({ item, index }) =
     if (!item.poster_path) return null;
     
     const handleGlow = useCallback(() => {
-        if (window.cineStreamBgTimeoutId) {
-            clearTimeout(window.cineStreamBgTimeoutId);
-        }
-        window.cineStreamBgTimeoutId = window.setTimeout(() => {
-            if (item.poster_path) {
-                const imageUrl = `${IMAGE_BASE_URL}w342${item.poster_path}`;
-                document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-                document.body.classList.add('has-dynamic-bg');
-            }
-        }, 200);
-    }, [item.poster_path]);
+        // Perf: dead work removed — this used to write an unused
+        // --dynamic-bg-image variable onto <body> (no CSS ever read it),
+        // forcing a full-page style recalculation on every card focus/hover.
+    }, []);
 
     return (
         <div
@@ -164,7 +149,6 @@ const CinemaCategoryRow: React.FC<{ title: string; items: Movie[] }> = ({ title,
             clearTimeout(window.cineStreamBgTimeoutId);
             window.cineStreamBgTimeoutId = null;
         }
-        document.body.classList.remove('has-dynamic-bg');
     }, []);
     return (
         <div className="my-8" onMouseLeave={handleMouseLeaveList}>

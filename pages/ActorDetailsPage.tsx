@@ -24,17 +24,10 @@ const FilmographyListItem: React.FC<{ item: Movie, index: number }> = ({ item, i
   };
 
   const handleGlow = useCallback(() => {
-    if (window.cineStreamBgTimeoutId) {
-        clearTimeout(window.cineStreamBgTimeoutId);
-    }
-    window.cineStreamBgTimeoutId = window.setTimeout(() => {
-        if (item.backdrop_path) {
-            const imageUrl = `${IMAGE_BASE_URL}w300${item.backdrop_path}`;
-            document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-            document.body.classList.add('has-dynamic-bg');
-        }
-    }, 200);
-  }, [item.backdrop_path]);
+        // Perf: dead work removed — this used to write an unused
+        // --dynamic-bg-image variable onto <body> (no CSS ever read it),
+        // forcing a full-page style recalculation on every card focus/hover.
+    }, []);
 
   if (!item.backdrop_path) return null;
 
@@ -115,7 +108,6 @@ const ActorDetailsPage: React.FC = () => {
             clearTimeout(window.cineStreamBgTimeoutId);
             window.cineStreamBgTimeoutId = null;
         }
-        document.body.classList.remove('has-dynamic-bg');
     }, []);
 
     if (loading || !actor) {

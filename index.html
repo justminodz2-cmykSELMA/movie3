@@ -19,6 +19,18 @@
         }
       })();
     </script>
+    <script>
+      /* Early TV detection: tags <html> with .is-tv so CSS can swap expensive
+         effects (backdrop-filter, image-blur glows) for cheap equivalents
+         before the first paint. Same UA regex used across the app. */
+      (function() {
+        try {
+          if (/SmartTV|Tizen|Web0S|AppleTV|AndroidTV|TV|PlayStation/i.test(navigator.userAgent)) {
+            document.documentElement.classList.add('is-tv');
+          }
+        } catch (e) {}
+      })();
+    </script>
     <!-- Tailwind is now pre-compiled at build time into /index.css (linked at the
          end of <head>, same cascade position as the old runtime-injected styles).
          This removes the in-browser Tailwind compiler, which re-scanned the DOM on
@@ -535,6 +547,25 @@
       .glow-card-container:hover::before,
       .glow-card-container:focus-within::before {
         opacity: 0.7;
+      }
+
+      /* ---- TV performance overrides (html.is-tv, set by the early UA script) ---- */
+      /* 1. Card glow: on TV, blurring a full poster image per selection is very
+         expensive. Replace it with a single cheap ambient gradient that keeps
+         the same soft halo feel. Zero blur, zero image decode. */
+      html.is-tv .glow-card-container::before {
+        background-image: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.35) 0%, rgba(255, 255, 255, 0.12) 55%, transparent 78%);
+        filter: none;
+        will-change: auto;
+      }
+      /* 2. backdrop-filter re-blurs everything behind the element every frame —
+         the single most expensive effect on TV GPUs (header keeps it running
+         constantly). Disable it; the tinted translucent backgrounds remain,
+         so the look stays nearly identical at zero cost. */
+      html.is-tv [class*="backdrop-blur"],
+      html.is-tv .backdrop-blur {
+        -webkit-backdrop-filter: none !important;
+        backdrop-filter: none !important;
       }
       
       /* Virtual Keyboard Animation */

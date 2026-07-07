@@ -16,21 +16,11 @@ const SimilarItemCard: React.FC<{ item: Movie, index: number }> = ({ item, index
     navigate(`/details/${type}/${item.id}`);
   };
 
-  const handleGlow = useCallback(() => {
-    if (item.poster_path) {
-        const imageUrl = `${IMAGE_BASE_URL}w342${item.poster_path}`;
-        document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-        document.body.classList.add('has-dynamic-bg');
-    }
-  }, [item.poster_path]);
-
   if (!item.poster_path) return null;
 
   return (
     <div
       onClick={handleClick}
-      onMouseEnter={handleGlow}
-      onFocus={handleGlow}
       className="flex-shrink-0 w-32 cursor-pointer animate-fade-in-up interactive-card-sm glow-card-container focusable"
       style={{ '--glow-image-url': `url(${IMAGE_BASE_URL}w342${item.poster_path})`, animationDelay: `${index * 50}ms` } as React.CSSProperties}
       tabIndex={0}
@@ -118,7 +108,19 @@ const DetailsPage: React.FC = () => {
           vid.play().catch(() => {});
       };
       attemptPlay();
-      const kick = setInterval(() => { if (!cancelled && !detailsAdStartedRef.current) attemptPlay(); }, 2000);
+      // Kick loop: retries play() on TVs that ignore the first call, and ALSO
+      // polls playback progress as a "started" fallback for TV WebViews that
+      // never fire the `playing`/`timeupdate` events (which caused audio to
+      // play while the video stayed hidden).
+      const kick = setInterval(() => {
+          if (cancelled || detailsAdStartedRef.current) return;
+          if (!vid.paused && vid.currentTime > 0.1) {
+              detailsAdStartedRef.current = true;
+              setAdStarted(true);
+              return;
+          }
+          attemptPlay();
+      }, 1000);
       // Watchdog: if this source never starts within 10s, try the next one,
       // or silently give up and keep showing the backdrop image.
       const watchdog = setTimeout(() => {
@@ -244,10 +246,6 @@ const DetailsPage: React.FC = () => {
      navigate('/player', { state: { item, type, season: selectedSeason, episode, streamUrl: prefetchedStreamUrl } });
   }
 
-  const handleMouseLeaveList = useCallback(() => {
-    document.body.classList.remove('has-dynamic-bg');
-  }, []);
-
   const seasonOptions = useMemo(() => {
     if (!item?.seasons) return [];
     return item.seasons
@@ -313,17 +311,27 @@ const DetailsPage: React.FC = () => {
         <div className="absolute top-20 start-4 z-20 animate-fade-in" style={{animationDelay: '0.5s'}}>
             <button onClick={() => navigate(-1)} className="w-10 h-10 text-white bg-black/50 rounded-full backdrop-blur-sm transition-transform btn-press focusable" tabIndex={0}><i className="fa-solid fa-arrow-left"></i></button>
         </div>
-        {/* Details-page ad: rendered UNDER the backdrop image, which stays
-            visible (no gray placeholder ever) until real ad frames render. */}
+        {/* Backdrop image stays as the permanent base layer: no gray
+            placeholder can ever be visible while the ad loads or if it fails. */}
+        <img
+          src={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${item.backdrop_path}`}
+          srcSet={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${item.backdrop_path} 780w, ${IMAGE_BASE_URL}${BACKDROP_SIZE}${item.backdrop_path} 1280w`}
+          sizes="100vw"
+          alt={item.title || item.name}
+          className="absolute inset-0 object-cover object-top w-full h-full"
+        />
+        {/* Details-page ad: rendered ABOVE the backdrop image (explicit z-index)
+            and fades itself in once real frames render. This guarantees the
+            video is visible whenever it is playing — audio can never play with
+            the picture stuck hidden behind the backdrop. */}
         {showAd && !adDone && (
           <video
             ref={detailsAdRef}
-            className="absolute inset-0 w-full h-full object-cover"
+            className={`absolute inset-0 z-[1] w-full h-full object-cover transition-opacity duration-500 ${adStarted ? 'opacity-100' : 'opacity-0'}`}
             autoPlay
             muted
             playsInline
             preload="auto"
-            poster="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='16'%20height='9'%3E%3Crect%20width='16'%20height='9'%20fill='black'/%3E%3C/svg%3E"
             onPlaying={() => { detailsAdStartedRef.current = true; setAdStarted(true); }}
             onTimeUpdate={(e) => {
               // Extra "started" signal for TV WebViews that never fire `playing`
@@ -343,13 +351,6 @@ const DetailsPage: React.FC = () => {
             }}
           />
         )}
-        <img
-          src={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${item.backdrop_path}`}
-          srcSet={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${item.backdrop_path} 780w, ${IMAGE_BASE_URL}${BACKDROP_SIZE}${item.backdrop_path} 1280w`}
-          sizes="100vw"
-          alt={item.title || item.name}
-          className={`absolute inset-0 object-cover object-top w-full h-full transition-opacity duration-500 ${showAd && adStarted && !adDone ? 'opacity-0' : 'opacity-100'}`}
-        />
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent"></div>
         <div className={`absolute inset-0 ${language === 'ar' ? 'bg-gradient-to-r' : 'bg-gradient-to-l'} from-[var(--background)] to-transparent opacity-60`}></div>
         {showAd && adStarted && !adDone && (
@@ -468,7 +469,7 @@ const DetailsPage: React.FC = () => {
         {activeTab === 'similar' && item.recommendations?.results && item.recommendations.results.length > 0 && (
           <div>
             <h3 className="text-xl font-bold text-white mb-4">{t('similar')}</h3>
-            <div onMouseLeave={handleMouseLeaveList} className="flex pb-4 -mx-4 overflow-x-auto no-scrollbar sm:mx-0">
+            <div className="flex pb-4 -mx-4 overflow-x-auto no-scrollbar sm:mx-0">
                 <div className="flex flex-nowrap gap-x-4 px-4">
                     {item.recommendations.results.map((movie, index) => <SimilarItemCard key={movie.id} item={movie} index={index} />)}
                 </div>

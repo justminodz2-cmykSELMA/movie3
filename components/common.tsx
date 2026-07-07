@@ -62,19 +62,6 @@ const RecommendationCard: React.FC<{ item: Movie; dataFocusGroup?: string; dataF
         toggleFavorite(item);
     }
 
-    const handleGlow = useCallback(() => {
-        if (window.cineStreamBgTimeoutId) {
-            clearTimeout(window.cineStreamBgTimeoutId);
-        }
-        window.cineStreamBgTimeoutId = window.setTimeout(() => {
-            if (item.backdrop_path) {
-                const imageUrl = `${IMAGE_BASE_URL}w300${item.backdrop_path}`;
-                document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
-                document.body.classList.add('has-dynamic-bg');
-            }
-        }, 200);
-    }, [item.backdrop_path]);
-
     if (!item.backdrop_path) return null;
 
     return (
@@ -82,8 +69,6 @@ const RecommendationCard: React.FC<{ item: Movie; dataFocusGroup?: string; dataF
             className={`bg-[var(--surface)] rounded-xl overflow-hidden cursor-pointer group shadow-lg focusable glow-card-container ${isKidsMode ? 'golden-worm-border' : ''}`} 
             onClick={handleCardClick}
             onKeyDown={(e) => e.key === 'Enter' && handleCardClick()}
-            onMouseEnter={handleGlow}
-            onFocus={handleGlow}
             style={{ '--glow-image-url': `url(${IMAGE_BASE_URL}w500${item.backdrop_path})` } as React.CSSProperties}
             tabIndex={0}
             data-focus-group={dataFocusGroup}
@@ -631,10 +616,7 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                                 )}
 
                                 {details.recommendations?.results && details.recommendations.results.length > 0 && (
-                                    <div className="mt-10" id="similar-section" onMouseLeave={() => {
-                                        if (window.cineStreamBgTimeoutId) { clearTimeout(window.cineStreamBgTimeoutId); window.cineStreamBgTimeoutId = null; }
-                                        document.body.classList.remove('has-dynamic-bg');
-                                    }}>
+                                    <div className="mt-10" id="similar-section">
                                         <h2 className="text-2xl font-bold mb-4 focusable" tabIndex={-1}>{t('similar')}</h2>
                                         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
                                             {details.recommendations.results.filter(r => r.backdrop_path).slice(0, 9).map((rec, index) => (
