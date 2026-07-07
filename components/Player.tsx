@@ -1150,28 +1150,32 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                             setSubtitles(data.subtitles);
                             // Trigger analysis non-blocking
                             const firstSub = data.subtitles[0];
-                            fetch(firstSub.url)
-                                .then(res => res.ok ? res.text() : Promise.reject('Failed to fetch subs'))
-                                .then(srtText => analyzeSubtitlesForSkips(srtText))
-                                .then(segments => { if (isMounted) setSkipSegments(segments); })
-                                .catch(e => console.error("Failed to fetch/analyze subtitles for skip markers", e));
+                            setTimeout(() => {
+                                fetch(firstSub.url)
+                                    .then(res => res.ok ? res.text() : Promise.reject('Failed to fetch subs'))
+                                    .then(srtText => analyzeSubtitlesForSkips(srtText))
+                                    .then(segments => { if (isMounted) setSkipSegments(segments); })
+                                    .catch(e => console.error("Failed to fetch/analyze subtitles for skip markers", e));
+                            }, 3000);
                         }
                         
                         // Background fetch for moviebox subtitles (don't play its video, just steal its subs)
                         if (data.provider !== 'moviebox') {
-                            fetchStreamUrl(item, itemType, initialSeason, initialEpisode?.episode_number, 'moviebox', serverPreferences)
-                                .then(mbData => {
-                                    if (mbData.subtitles && mbData.subtitles.length > 0 && isMounted) {
-                                        // Tag them as MovieBox so they are identifiable
-                                        const mbSubs = mbData.subtitles.map(s => ({
-                                            ...s,
-                                            language: s.language === 'ar' ? 'ar-mb' : `mb-${s.language}`,
-                                            display: `MovieBox ${s.display}`
-                                        }));
-                                        setAddonSubtitles(prev => [...prev, ...mbSubs]);
-                                    }
-                                })
-                                .catch(() => console.log("MovieBox background subtitle fetch skipped or failed."));
+                            setTimeout(() => {
+                                fetchStreamUrl(item, itemType, initialSeason, initialEpisode?.episode_number, 'moviebox', serverPreferences)
+                                    .then(mbData => {
+                                        if (mbData.subtitles && mbData.subtitles.length > 0 && isMounted) {
+                                            // Tag them as MovieBox so they are identifiable
+                                            const mbSubs = mbData.subtitles.map(s => ({
+                                                ...s,
+                                                language: s.language === 'ar' ? 'ar-mb' : `mb-${s.language}`,
+                                                display: `MovieBox ${s.display}`
+                                            }));
+                                            setAddonSubtitles(prev => [...prev, ...mbSubs]);
+                                        }
+                                    })
+                                    .catch(() => console.log("MovieBox background subtitle fetch skipped or failed."));
+                            }, 5000);
                         }
                         
                         onProviderSelected(data.provider);
@@ -1431,16 +1435,18 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         if (liveChannels || isLiveScheduleMode || !item?.id) return;
         if (addonPlayerConfig.sources.length === 0) return;
         let active = true;
-        fetchAddonSubtitles(
-            addonPlayerConfig.sources,
-            itemType === 'tv' ? 'tv' : 'movie',
-            item.id,
-            initialSeason,
-            initialEpisode?.episode_number,
-        ).then(tracks => {
-            if (active && tracks.length > 0) setAddonSubtitles(tracks);
-        }).catch(() => {});
-        return () => { active = false; };
+        const timer = setTimeout(() => {
+            fetchAddonSubtitles(
+                addonPlayerConfig.sources,
+                itemType === 'tv' ? 'tv' : 'movie',
+                item.id,
+                initialSeason,
+                initialEpisode?.episode_number,
+            ).then(tracks => {
+                if (active && tracks.length > 0) setAddonSubtitles(tracks);
+            }).catch(() => {});
+        }, 4000);
+        return () => { active = false; clearTimeout(timer); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [item.id, itemType, initialEpisode?.id, addonPlayerConfig.sources]);
 
@@ -1453,12 +1459,14 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         skipAnalysisFromAddonRef.current = true;
         let active = true;
         const first = addonSubtitles.find(s => s.language.startsWith('en')) || addonSubtitles[0];
-        fetch(first.url)
-            .then(res => res.ok ? res.text() : Promise.reject('Failed to fetch addon subs'))
-            .then(srtText => analyzeSubtitlesForSkips(srtText))
-            .then(segments => { if (active) setSkipSegments(segments); })
-            .catch(e => console.error("Failed to analyze addon subtitles for skip markers", e));
-        return () => { active = false; };
+        const timer = setTimeout(() => {
+            fetch(first.url)
+                .then(res => res.ok ? res.text() : Promise.reject('Failed to fetch addon subs'))
+                .then(srtText => analyzeSubtitlesForSkips(srtText))
+                .then(segments => { if (active) setSkipSegments(segments); })
+                .catch(e => console.error("Failed to analyze addon subtitles for skip markers", e));
+        }, 3000);
+        return () => { active = false; clearTimeout(timer); };
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addonSubtitles, subtitles]);
 
@@ -1486,9 +1494,12 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             }
             if (active) setVttTracks(newTracks);
         };
-        if (allSubtitles.length > 0) processSubtitles(); else setVttTracks([]);
+        const timer = setTimeout(() => {
+            if (allSubtitles.length > 0) processSubtitles(); else setVttTracks([]);
+        }, 1500);
         return () => {
             active = false;
+            clearTimeout(timer);
             createdUrls.forEach(url => URL.revokeObjectURL(url));
         }
     }, [allSubtitles]);
@@ -2748,17 +2759,20 @@ const Controls: React.FC<any> = ({
             <div className="relative p-4 lg:p-6 pb-8 lg:pb-10 flex flex-col gap-4">
                 <div className="flex items-end justify-between gap-4">
                     {/* Left Info Panel */}
-                    <div ref={infoPanelRef} className="bg-white/10 p-5 rounded-lg max-w-lg focus-within:bg-white/90 focus-within:text-black transition-colors duration-300">
-                        <h1 tabIndex={0} className="text-2xl font-bold focusable outline-none">{title}</h1>
-                        <p className="text-base mt-2 flex items-center gap-2 min-w-0">
-                            {description && (
-                                <>
-                                    <span className="truncate max-w-[50%] flex-shrink min-w-0">{description}</span>
-                                    <span className="flex-shrink-0">•</span>
-                                </>
-                            )}
-                            <span className="whitespace-nowrap flex-shrink-0">{subtitle}</span>
-                        </p>
+                    <div className="flex flex-col gap-3">
+
+                        <div ref={infoPanelRef} className="bg-white/10 p-5 rounded-lg max-w-lg focus-within:bg-white/90 focus-within:text-black transition-colors duration-300">
+                            <h1 tabIndex={0} className="text-2xl font-bold focusable outline-none">{title}</h1>
+                            <p className="text-base mt-2 flex items-center gap-2 min-w-0">
+                                {description && (
+                                    <>
+                                        <span className="truncate max-w-[50%] flex-shrink min-w-0">{description}</span>
+                                        <span className="flex-shrink-0">•</span>
+                                    </>
+                                )}
+                                <span className="whitespace-nowrap flex-shrink-0">{subtitle}</span>
+                            </p>
+                        </div>
                     </div>
 
                     {/* Right Controls Panel */}
