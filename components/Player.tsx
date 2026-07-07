@@ -1733,6 +1733,13 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 return;
             }
 
+            const seek = (offset: number) => {
+                const video = videoRef.current;
+                if (video) {
+                    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + offset));
+                }
+            };
+
             switch (e.key) {
                 case 'ArrowUp':
                     if (recsFocusables.includes(active)) {
@@ -1760,7 +1767,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                             controlsFocusables[currentIndex + 1].focus();
                         }
                     } else if (active === progressFocusable) {
-                        // Hold arrow right on progress - will seek on keyup
+                        seek(5);
                     } else if (recsFocusables.includes(active)) {
                         const currentIndex = recsFocusables.indexOf(active);
                         if (currentIndex < recsFocusables.length - 1) {
@@ -1777,7 +1784,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                             infoFocusables[0]?.focus();
                         }
                     } else if (active === progressFocusable) {
-                        // Hold arrow left on progress - will seek on keyup
+                        seek(-5);
                     } else if (recsFocusables.includes(active)) {
                         const currentIndex = recsFocusables.indexOf(active);
                         if (currentIndex > 0) {
@@ -1787,39 +1794,10 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     break;
             }
         };
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            if (adState.isActive || showSettingsPanel || showSubtitlesPanel || isChannelListVisible || !isOverlayVisible) {
-                return;
-            }
-
-            const active = document.activeElement;
-            if (active !== progressFocusable) return;
-
-            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
-                e.preventDefault();
-                e.stopPropagation();
-
-                const seek = (offset: number) => {
-                    const video = videoRef.current;
-                    if (video) {
-                        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + offset));
-                    }
-                };
-
-                if (e.key === 'ArrowRight') {
-                    seek(5);
-                } else if (e.key === 'ArrowLeft') {
-                    seek(-5);
-                }
-            }
-        };
         
         document.addEventListener('keydown', handleKeyDown);
-        document.addEventListener('keyup', handleKeyUp);
         return () => {
             document.removeEventListener('keydown', handleKeyDown);
-            document.removeEventListener('keyup', handleKeyUp);
         };
     }, [isOverlayVisible, showSettingsPanel, showSubtitlesPanel, isChannelListVisible, togglePlay, activeSkip, liveChannels, adState.isActive, adState.canSkip]);
 
