@@ -36,6 +36,90 @@ import * as Icons from './Icons';
 import { IMAGE_BASE_URL, BACKDROP_SIZE_MEDIUM } from '../contexts/constants';
 import { translateSrtViaGoogle } from '../services/translationService';
 
+// ------------------------------------------------------------------
+// Subtitle normalizer: converts ANY subtitle text (SRT or VTT, even
+// slightly malformed files with stray blank lines, BOMs, cue numbers,
+// styling tags or out-of-order cues) into a clean, spec-perfect VTT
+// string, so the browser fires every cue at exactly the right time.
+// ------------------------------------------------------------------
+const SUB_TIME_RE = /(?:(\d{1,2}):)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})\s*-->\s*(?:(\d{1,2}):)?(\d{1,2}):(\d{1,2})[.,](\d{1,3})/;
+
+const subTimeToSeconds = (h: string | undefined, m: string, s: string, ms: string): number =>
+    (parseInt(h || '0', 10) * 3600) + (parseInt(m, 10) * 60) + parseInt(s, 10) +
+    (parseInt(ms.padEnd(3, '0').slice(0, 3), 10) / 1000);
+
+const secondsToVttTime = (t: number): string => {
+    const total = Math.max(0, t);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = Math.floor(total % 60);
+    const ms = Math.round((total - Math.floor(total)) * 1000) % 1000;
+    const pad = (n: number, l = 2) => String(n).padStart(l, '0');
+    return `${pad(h)}:${pad(m)}:${pad(s)}.${pad(ms, 3)}`;
+};
+
+const cleanSubtitleLine = (line: string): string =>
+    line
+        .replace(/\{\\[^}]*\}/g, '')      // ASS/SSA positioning tags like {\an8}
+        .replace(/<\/?[^>\n]+>/g, '')      // HTML/VTT styling tags (<i>, <font>, <c.xxx>…)
+        .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ')
+        .trim();
+
+const normalizeSubtitleToVtt = (rawText: string): string => {
+    try {
+        const text = rawText.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n');
+        const lines = text.split('\n');
+        type ParsedCue = { start: number; end: number; lines: string[] };
+        const cues: ParsedCue[] = [];
+        let current: ParsedCue | null = null;
+
+        const nextNonEmpty = (from: number): string => {
+            for (let j = from; j < lines.length; j++) {
+                const t = lines[j].trim();
+                if (t !== '') return t;
+            }
+            return '';
+        };
+
+        for (let i = 0; i < lines.length; i++) {
+            const trimmed = lines[i].trim();
+            const m = trimmed.match(SUB_TIME_RE);
+            if (m) {
+                if (current) cues.push(current);
+                current = {
+                    start: subTimeToSeconds(m[1], m[2], m[3], m[4]),
+                    end: subTimeToSeconds(m[5], m[6], m[7], m[8]),
+                    lines: [],
+                };
+                continue;
+            }
+            if (trimmed === '') continue;
+            if (!current && /^WEBVTT/i.test(trimmed)) continue;
+            if (!current && /^(NOTE|STYLE|REGION)\b/.test(trimmed)) continue;
+            if (/^\d+$/.test(trimmed) && SUB_TIME_RE.test(nextNonEmpty(i + 1))) {
+                if (current) { cues.push(current); current = null; }
+                continue;
+            }
+            if (!current) continue;
+            const cleaned = cleanSubtitleLine(lines[i]);
+            if (cleaned) current.lines.push(cleaned);
+        }
+        if (current) cues.push(current);
+
+        const valid = cues
+            .filter(c => c.lines.length > 0 && isFinite(c.start) && isFinite(c.end))
+            .map(c => ({ ...c, end: c.end > c.start ? c.end : c.start + 2 }))
+            .sort((a, b) => a.start - b.start || a.end - b.end);
+
+        if (valid.length === 0) return '';
+        return 'WEBVTT\n\n' + valid
+            .map(c => `${secondsToVttTime(c.start)} --> ${secondsToVttTime(c.end)}\n${c.lines.join('\n')}`)
+            .join('\n\n') + '\n';
+    } catch {
+        return '';
+    }
+};
+
 interface PlayerProps {
     item: Movie;
     itemType: 'movie' | 'tv';
@@ -1072,6 +1156,24 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                                 .then(segments => { if (isMounted) setSkipSegments(segments); })
                                 .catch(e => console.error("Failed to fetch/analyze subtitles for skip markers", e));
                         }
+                        
+                        // Background fetch for moviebox subtitles (don't play its video, just steal its subs)
+                        if (data.provider !== 'moviebox') {
+                            fetchStreamUrl(item, itemType, initialSeason, initialEpisode?.episode_number, 'moviebox', serverPreferences)
+                                .then(mbData => {
+                                    if (mbData.subtitles && mbData.subtitles.length > 0 && isMounted) {
+                                        // Tag them as MovieBox so they are identifiable
+                                        const mbSubs = mbData.subtitles.map(s => ({
+                                            ...s,
+                                            language: s.language === 'ar' ? 'ar-mb' : `mb-${s.language}`,
+                                            display: `MovieBox ${s.display}`
+                                        }));
+                                        setAddonSubtitles(prev => [...prev, ...mbSubs]);
+                                    }
+                                })
+                                .catch(() => console.log("MovieBox background subtitle fetch skipped or failed."));
+                        }
+                        
                         onProviderSelected(data.provider);
                     } else {
                         throw new Error(t('noStreamLinks'));
@@ -1365,21 +1467,8 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         let active = true;
         let createdUrls: string[] = [];
         const processSubtitles = async () => {
-            // Tolerant timestamp matcher: hours optional, 1-3 digit milliseconds, comma or dot.
-            const srtTimestampLineRegex = /(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d{1,3})\s*-->\s*(\d{1,2}:)?(\d{1,2}):(\d{2})[,.](\d{1,3})/g;
-            const normalizeTime = (h: string | undefined, m: string, s: string, ms: string) =>
-                `${(h ? h.replace(':', '') : '0').padStart(2, '0')}:${m.padStart(2, '0')}:${s}.${ms.padEnd(3, '0')}`;
             const processSrtToVtt = (rawText: string) => {
-                // Strip BOM and normalize line endings.
-                const srtText = rawText.replace(/^\uFEFF/, '').replace(/\r/g, '');
-                let vttContent: string;
-                if (/^\s*WEBVTT/.test(srtText)) {
-                    // Already a valid VTT file – don't prepend a second header.
-                    vttContent = srtText.trimStart();
-                } else {
-                    vttContent = "WEBVTT\n\n" + srtText.replace(srtTimestampLineRegex,
-                        (_, h1, m1, s1, ms1, h2, m2, s2, ms2) => `${normalizeTime(h1, m1, s1, ms1)} --> ${normalizeTime(h2, m2, s2, ms2)}`);
-                }
+                const vttContent = normalizeSubtitleToVtt(rawText);
                 const blob = new Blob([vttContent], { type: 'text/vtt' });
                 const vttUrl = URL.createObjectURL(blob);
                 createdUrls.push(vttUrl);
@@ -1864,9 +1953,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 aiSubProgressRef.current = `${done}/${total}`;
             });
             // Convert translated SRT to a VTT blob track
-            const srtTimestampLineRegex = /(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/g;
-            let vttContent = "WEBVTT\n\n";
-            vttContent += translated.replace(/\r/g, '').replace(srtTimestampLineRegex, (_, s, e) => `${s.replace(',', '.')} --> ${e.replace(',', '.')}`);
+            const vttContent = normalizeSubtitleToVtt(translated);
             const vttUrl = URL.createObjectURL(new Blob([vttContent], { type: 'text/vtt' }));
             const track = { lang: aiLang, url: vttUrl, label: `✨ ${label} · AI` };
             setAiVttTracks(prev => [...prev.filter(p => p.lang !== aiLang), track]);
@@ -1902,9 +1989,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             const srtText = await res.text();
             const translated = await translateSrtFast(srtText, code);
             // Convert translated SRT to a VTT blob track
-            const srtTimestampLineRegex = /(\d{2}:\d{2}:\d{2}[,.]\d{3})\s*-->\s*(\d{2}:\d{2}:\d{2}[,.]\d{3})/g;
-            let vttContent = "WEBVTT\n\n";
-            vttContent += translated.replace(/\r/g, '').replace(srtTimestampLineRegex, (_, s, e) => `${s.replace(',', '.')} --> ${e.replace(',', '.')}`);
+            const vttContent = normalizeSubtitleToVtt(translated);
             const vttUrl = URL.createObjectURL(new Blob([vttContent], { type: 'text/vtt' }));
             const track = { lang: qtLang, url: vttUrl, label: `⚡ ${label}` };
             setQuickVttTracks(prev => [...prev.filter(p => p.lang !== qtLang), track]);
@@ -2243,12 +2328,14 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     {activeCues.map((cue, i) => (
                         <span
                             key={i}
-                            className="py-1 px-3 rounded whitespace-pre-line"
+                            className="py-1 px-3 rounded whitespace-pre-line block"
+                            dir="auto"
                             style={{
                                 color: 'white',
                                 backgroundColor: `rgba(0, 0, 0, ${subtitleSettings.backgroundOpacity / 100})`,
                                 textShadow: subtitleSettings.edgeStyle === 'drop-shadow' ? '2px 2px 3px rgba(0,0,0,0.8)' : 
                                             subtitleSettings.edgeStyle === 'outline' ? 'rgb(0, 0, 0) 1px 1px 2px, rgb(0, 0, 0) -1px -1px 2px, rgb(0, 0, 0) -1px 1px 2px, rgb(0, 0, 0) 1px -1px 2px' : 'none',
+                                unicodeBidi: 'plaintext',
                             }}
                         >
                             {cue.text}
