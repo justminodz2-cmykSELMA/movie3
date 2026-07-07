@@ -28,8 +28,8 @@ export const FAST_TRANSLATE_LANGS: { code: string; label: string }[] = [
   { code: 'hi', label: 'हिन्दी (Hindi)' },
 ];
 
-const BATCH_MAX_CUES = 90;       // cues per request
-const BATCH_MAX_CHARS = 9_000;   // characters per request
+const BATCH_MAX_CUES = 60;       // cues per request
+const BATCH_MAX_CHARS = 4_000;   // characters per request
 const MAX_CUES = 4_000;          // safety cap for extremely large files
 
 interface SrtCue {
@@ -65,46 +65,87 @@ function parseSrt(srt: string): SrtCue[] {
  * falling back to the original string on any per-item failure.
  */
 async function translateBatch(texts: string[], targetLang: string): Promise<string[]> {
-  // Primary: translate_a/t supports multiple `q` params and returns an array.
+  // Try multiple Google Translate clients to avoid rate limits
+  const clients = ['gtx', 'dict-chrome-ex', 'webapp', 't'];
+  
+  for (const client of clients) {
+    // Primary strategy: translate_a/t supports multiple `q` params and returns an array.
+    try {
+      const body = new URLSearchParams();
+      for (const t of texts) body.append('q', t);
+      const url = `https://translate.googleapis.com/translate_a/t?client=${client}&sl=auto&tl=${encodeURIComponent(targetLang)}&format=text`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: body.toString(),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          const out = data.map((item: any) => {
+            if (typeof item === 'string') return item;
+            if (Array.isArray(item) && typeof item[0] === 'string') return item[0];
+            return '';
+          });
+          if (out.length === texts.length && out.every(s => typeof s === 'string')) {
+            return out.map((s, i) => s || texts[i]);
+          }
+        }
+      }
+    } catch (e) {
+      console.warn(`Fast translate primary endpoint failed with client ${client}`, e);
+    }
+
+    // Fallback strategy: translate_a/single with newline-preserving joining.
+    // Using POST to avoid 414 URI Too Long for large batches.
+    try {
+      const SEP = '\n@@\n';
+      const joined = texts.join(SEP);
+      const url = `https://translate.googleapis.com/translate_a/single?client=${client}&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t`;
+      const body = new URLSearchParams();
+      body.append('q', joined);
+      
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
+        body: body.toString(),
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const translatedFull = Array.isArray(data?.[0])
+          ? data[0].map((seg: any) => (Array.isArray(seg) ? seg[0] || '' : '')).join('')
+          : '';
+        const parts = translatedFull.split(/\n\s*@@\s*\n/);
+        if (parts.length === texts.length) {
+          return parts.map((s: string, i: number) => s.trim() || texts[i]);
+        }
+      }
+    } catch (e) {
+      console.warn(`Fast translate fallback endpoint failed with client ${client}`, e);
+    }
+  }
+
+  // Final fallback: Lingva API proxy
   try {
-    const body = new URLSearchParams();
-    for (const t of texts) body.append('q', t);
-    const url = `https://translate.googleapis.com/translate_a/t?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&format=text`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' },
-      body: body.toString(),
-    });
+    const SEP = ' ||| ';
+    const joined = texts.join(SEP);
+    const lingvaUrl = `https://lingva.ml/api/v1/auto/${encodeURIComponent(targetLang)}/${encodeURIComponent(joined)}`;
+    const res = await fetch(lingvaUrl);
     if (res.ok) {
       const data = await res.json();
-      if (Array.isArray(data)) {
-        const out = data.map((item: any) => {
-          if (typeof item === 'string') return item;
-          if (Array.isArray(item) && typeof item[0] === 'string') return item[0];
-          return '';
-        });
-        if (out.length === texts.length && out.every(s => typeof s === 'string')) {
-          return out.map((s, i) => s || texts[i]);
+      if (data.translation) {
+        const parts = data.translation.split(/\s*\|\|\|\s*/);
+        if (parts.length === texts.length) {
+          return parts.map((s: string, i: number) => s.trim() || texts[i]);
         }
       }
     }
   } catch (e) {
-    console.warn('Fast translate primary endpoint failed, using fallback', e);
+    console.warn('Fast translate Lingva fallback failed', e);
   }
 
-  // Fallback: translate_a/single with newline-preserving joining.
-  const SEP = '\n@@\n';
-  const joined = texts.join(SEP);
-  const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=auto&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(joined)}`;
-  const res = await fetch(url);
-  if (!res.ok) throw new Error('Translation service unavailable');
-  const data = await res.json();
-  const translatedFull = Array.isArray(data?.[0])
-    ? data[0].map((seg: any) => (Array.isArray(seg) ? seg[0] || '' : '')).join('')
-    : '';
-  const parts = translatedFull.split(/\n\s*@@\s*\n/);
-  if (parts.length === texts.length) return parts.map((s: string, i: number) => s.trim() || texts[i]);
-  // Could not split back reliably — keep originals rather than corrupt cues.
+  // Could not translate — keep originals rather than corrupt cues.
   return texts;
 }
 
