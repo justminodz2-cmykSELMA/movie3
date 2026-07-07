@@ -27,7 +27,7 @@ import { Movie, Episode, SubtitleTrack, SubtitleSettings, StreamLink } from '../
 import VideoEnhancer4K from './videoEnhancer';
 import { useProfile } from '../contexts/ProfileContext';
 import { useTranslation } from '../contexts/LanguageContext';
-import { fetchStreamUrl, fetchFromTMDB, analyzeSubtitlesForSkips, streamDubbing, DubbingBatch } from '../services/apiService';
+import { fetchStreamUrl, fetchFromTMDB, analyzeSubtitlesForSkips, streamDubbing, DubbingBatch, fetchClientSideSubtitles } from '../services/apiService';
 import { useAddons } from '../addons/AddonContext';
 import { collectAddonPlayerConfig, fetchAddonSubtitles } from '../addons/playerBridge';
 import { translateSrtWithGemini } from '../services/geminiSubtitleService';
@@ -1422,7 +1422,36 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                                     .catch(e => console.error("Failed to fetch/analyze subtitles for skip markers", e));
                             }, 3000);
                         }
+
+                        // Background fetch to get real subtitle names from OpenSubtitles if Vercel returned numbers
+                        const hasMissingNames = !data.subtitles || data.subtitles.length === 0 || data.subtitles.some(s => {
+                            const name = s.release || s.filename || '';
+                            return /^\d+$/.test(name) || !name;
+                        });
                         
+                        if (hasMissingNames) {
+                            fetchClientSideSubtitles(item, itemType, initialSeason, initialEpisode?.episode_number)
+                                .then(clientSubs => {
+                                    if (clientSubs.length > 0 && isMounted) {
+                                        setSubtitles(prev => {
+                                            const filteredPrev = prev.filter(s => {
+                                                const name = s.release || s.filename || '';
+                                                return name && !(/^\d+$/.test(name));
+                                            });
+                                            const merged = [...clientSubs];
+                                            const seenUrls = new Set(clientSubs.map(c => c.url));
+                                            for (const p of filteredPrev) {
+                                                if (!seenUrls.has(p.url)) {
+                                                    merged.push(p);
+                                                    seenUrls.add(p.url);
+                                                }
+                                            }
+                                            return merged;
+                                        });
+                                    }
+                                }).catch(() => {});
+                        }
+
                         // Background fetch for moviebox subtitles (don't play its video, just steal its subs)
                         if (data.provider !== 'moviebox') {
                             setTimeout(() => {
