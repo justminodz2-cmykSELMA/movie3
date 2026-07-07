@@ -1759,6 +1759,8 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                         if (currentIndex < controlsFocusables.length - 1) {
                             controlsFocusables[currentIndex + 1].focus();
                         }
+                    } else if (active === progressFocusable) {
+                        // Hold arrow right on progress - will seek on keyup
                     } else if (recsFocusables.includes(active)) {
                         const currentIndex = recsFocusables.indexOf(active);
                         if (currentIndex < recsFocusables.length - 1) {
@@ -1774,6 +1776,8 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                         } else {
                             infoFocusables[0]?.focus();
                         }
+                    } else if (active === progressFocusable) {
+                        // Hold arrow left on progress - will seek on keyup
                     } else if (recsFocusables.includes(active)) {
                         const currentIndex = recsFocusables.indexOf(active);
                         if (currentIndex > 0) {
@@ -1792,21 +1796,22 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             const active = document.activeElement;
             if (active !== progressFocusable) return;
 
-            const seek = (offset: number) => {
-                const video = videoRef.current;
-                if (video) {
-                    video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + offset));
-                }
-            };
+            if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+                e.preventDefault();
+                e.stopPropagation();
 
-            if (e.key === 'ArrowRight') {
-                e.preventDefault();
-                e.stopPropagation();
-                seek(5);
-            } else if (e.key === 'ArrowLeft') {
-                e.preventDefault();
-                e.stopPropagation();
-                seek(-5);
+                const seek = (offset: number) => {
+                    const video = videoRef.current;
+                    if (video) {
+                        video.currentTime = Math.max(0, Math.min(video.duration, video.currentTime + offset));
+                    }
+                };
+
+                if (e.key === 'ArrowRight') {
+                    seek(5);
+                } else if (e.key === 'ArrowLeft') {
+                    seek(-5);
+                }
             }
         };
         
