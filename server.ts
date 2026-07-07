@@ -1569,7 +1569,7 @@ app.use((req, res, next) => {
 
       res.setHeader("Access-Control-Allow-Origin", "*");
       res.setHeader("Content-Type", "text/vtt");
-      res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
+      res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate");
 
       if (raw.trim().startsWith("WEBVTT")) {
         return res.send(raw);
