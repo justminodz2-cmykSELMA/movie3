@@ -11,7 +11,7 @@ import TvShowsPage from './pages/TvShowsPage';
 import DetailsPage from './pages/DetailsPage';
 import CinemaPage from './pages/CinemaPage';
 import LiveRoomPage from './pages/LiveRoomPage';
-import ShortsPage from './pages/ShortsPage';
+import ShortsPage from './pages/ShortsPage'; 
 import YouPage from './pages/YouPage';
 import AISearchPage from './pages/AISearchPage';
 import IframePlayerPage from './pages/IframePlayerPage';
