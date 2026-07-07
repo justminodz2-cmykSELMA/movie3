@@ -185,7 +185,11 @@ export const fetchStreamUrl = async (
                             return {
                                 display: label,
                                 language: code,
-                                url: `/api/vs-sub?url=${encodeURIComponent(s.url)}`
+                                url: `/api/vs-sub?url=${encodeURIComponent(s.url)}`,
+                                filename: s.filename,
+                                release: s.release,
+                                downloads: s.downloads,
+                                rating: s.rating
                             };
                         });
                 }
