@@ -909,25 +909,52 @@ app.use((req, res, next) => {
   // redirect manually, and rewrite the broken "_" host back to the real one.
   async function fetchOpenSubtitlesREST(url: string, timeoutMs = 8000) {
     const targetUrl = url.toLowerCase();
-    let res = await fetch(targetUrl, {
-      headers: vsOpenSubsHeaders,
-      redirect: "manual",
-      signal: AbortSignal.timeout(timeoutMs),
-    });
+    const direct = async () => {
+      let res = await fetch(targetUrl, {
+        headers: vsOpenSubsHeaders,
+        redirect: "manual",
+        signal: AbortSignal.timeout(timeoutMs),
+      });
 
-    if (res.status >= 300 && res.status < 400) {
-      let location = res.headers.get("location");
-      if (location) {
-        if (location.startsWith("https://_/")) {
-          location = location.replace("https://_/", "https://rest.opensubtitles.org/");
-        } else if (location.startsWith("http://_/")) {
-          location = location.replace("http://_/", "https://rest.opensubtitles.org/");
+      if (res.status >= 300 && res.status < 400) {
+        let location = res.headers.get("location");
+        if (location) {
+          if (location.startsWith("https://_/")) {
+            location = location.replace("https://_/", "https://rest.opensubtitles.org/");
+          } else if (location.startsWith("http://_/")) {
+            location = location.replace("http://_/", "https://rest.opensubtitles.org/");
+          }
+          res = await fetch(location, {
+            headers: vsOpenSubsHeaders,
+            signal: AbortSignal.timeout(timeoutMs),
+          });
         }
-        res = await fetch(location, {
-          headers: vsOpenSubsHeaders,
-          signal: AbortSignal.timeout(timeoutMs),
-        });
       }
+      return res;
+    };
+
+    let res: Response | null = null;
+    try {
+      res = await direct();
+    } catch {
+      res = null;
+    }
+
+    // If the direct request is walled off in production (Cloudflare challenge
+    // / datacenter-IP block), retry through the optional Cloudflare worker
+    // (VS_STREAM_PROXY) whose egress IPs are not blocked, so production gets
+    // the SAME rich subtitle names (release + downloads) as local dev.
+    if (!res || !res.ok) {
+      if (VS_STREAM_PROXY) {
+        try {
+          const viaWorker = await fetch(
+            `${VS_STREAM_PROXY}/ts?url=${encodeURIComponent(targetUrl)}`,
+            { signal: AbortSignal.timeout(timeoutMs) },
+          );
+          if (viaWorker.ok) return viaWorker;
+        } catch {}
+      }
+      if (!res) res = await direct(); // one last retry; throws like before if it fails
     }
     return res;
   }
@@ -1033,8 +1060,11 @@ app.use((req, res, next) => {
       out.push({
         lang: label,
         url: String(s.url),
-        filename: String(s.id || ""),
-        release: String(s.id || ""),
+        // The mirror only exposes numeric ids — never show them as names.
+        // Empty name fields make the player fall back to its clean
+        // "Subtitle Version N" label instead of a weird number.
+        filename: "",
+        release: "",
       });
     }
     return out;
@@ -1113,7 +1143,8 @@ app.use((req, res, next) => {
   // Fetch default subtitles (cached). Never throws — an empty list simply
   // means the player falls back to whatever the stream provider scraped.
   async function vsFetchDefaultSubs(type: string, tmdb_id: string, season?: number, episode?: number): Promise<VsSub[]> {
-    const key = `vssubs:${type}:${tmdb_id}:${season ?? ""}:${episode ?? ""}`;
+    // v3 key: busts stale cached lists (numeric-id names / dead links).
+    const key = `vssubs3:${type}:${tmdb_id}:${season ?? ""}:${episode ?? ""}`;
     const mem = vsCache.get(key);
     if (mem && Date.now() - mem.timestamp < 1000 * 60 * 60 * 6) return mem.response;
     if (redis) {
@@ -1549,7 +1580,26 @@ app.use((req, res, next) => {
     if (!fileUrl) return res.status(400).send("Missing subtitle URL");
 
     try {
-      const subtitleRes = await vsFetch(fileUrl, {}, 10000);
+      // Direct download first; if the host walls off this server's IP in
+      // production (download.opensubtitles.org often blocks datacenter IPs),
+      // retry through the Cloudflare worker so the file actually loads.
+      let subtitleRes: Response | null = null;
+      try {
+        subtitleRes = await vsFetch(fileUrl, {}, 10000);
+      } catch {
+        subtitleRes = null;
+      }
+      if ((!subtitleRes || !subtitleRes.ok) && VS_STREAM_PROXY) {
+        try {
+          const viaWorker = await vsFetch(
+            `${VS_STREAM_PROXY}/ts?url=${encodeURIComponent(fileUrl)}`,
+            {},
+            10000,
+          );
+          if (viaWorker.ok) subtitleRes = viaWorker;
+        } catch {}
+      }
+      if (!subtitleRes) subtitleRes = await vsFetch(fileUrl, {}, 10000);
 
       // OpenSubtitles download links serve gzipped SRT files — detect the
       // gzip magic bytes and decompress before converting to VTT.
