@@ -892,7 +892,7 @@ app.use((req, res, next) => {
     en: "English", ar: "Arabic", fr: "French", es: "Spanish", de: "German",
     it: "Italian", pt: "Portuguese", ru: "Russian", tr: "Turkish",
   };
-  const VS_SUB_MAX_PER_LANG = 3;
+  const VS_SUB_MAX_PER_LANG = 20;
   // TMDB v3 key — same public key the frontend already ships with
   // (contexts/constants.ts); used server-side only to resolve IMDB ids.
   const VS_TMDB_KEY = "12b96f7cdd99dcc564c5723a2f256b24";
@@ -959,7 +959,14 @@ app.use((req, res, next) => {
     return imdb;
   }
 
-  type VsSub = { lang: string; url: string };
+  type VsSub = {
+    lang: string;
+    url: string;
+    filename?: string;
+    release?: string;
+    downloads?: number;
+    rating?: number;
+  };
 
   // Primary source: OpenSubtitles legacy REST (with the lowercase fix).
   async function vsSubsFromRest(imdb: string, season?: number, episode?: number): Promise<VsSub[]> {
@@ -985,7 +992,14 @@ app.use((req, res, next) => {
     for (const [iso, arr] of perLang) {
       arr.sort((a, b) => (parseInt(b.SubDownloadsCnt) || 0) - (parseInt(a.SubDownloadsCnt) || 0));
       for (const item of arr.slice(0, VS_SUB_MAX_PER_LANG)) {
-        out.push({ lang: VS_SUB_LANGS[iso], url: String(item.SubDownloadLink) });
+        out.push({
+          lang: VS_SUB_LANGS[iso],
+          url: String(item.SubDownloadLink),
+          filename: String(item.SubFileName || ""),
+          release: String(item.MovieReleaseName || ""),
+          downloads: parseInt(item.SubDownloadsCnt) || 0,
+          rating: parseFloat(item.SubRating) || 0,
+        });
       }
     }
     return out;
@@ -1016,7 +1030,12 @@ app.use((req, res, next) => {
       const n = perLang.get(label) || 0;
       if (n >= VS_SUB_MAX_PER_LANG) continue;
       perLang.set(label, n + 1);
-      out.push({ lang: label, url: String(s.url) });
+      out.push({
+        lang: label,
+        url: String(s.url),
+        filename: String(s.id || ""),
+        release: String(s.id || ""),
+      });
     }
     return out;
   }
