@@ -450,40 +450,19 @@ const SubtitlesPanel: React.FC<{
         }
     }, [show, triggerRef]);
 
-    // Group subtitles by language display/code
+    // Group raw subtitles by language display/code
     const grouped = useMemo(() => {
         const groups: Record<string, { display: string, tracks: SubtitleTrack[] }> = {};
         for (const s of allSubtitles) {
             if (!s || !s.url) continue;
-            
-            // Normalize language code to short form, handling qt-lang and ai-lang and mb-lang formats
-            const rawLang = s.language || '';
-            const parts = rawLang.split('-');
-            let code = parts[0].toLowerCase();
-            if ((code === 'qt' || code === 'ai' || code === 'mb') && parts[1]) {
-                code = parts[1].toLowerCase();
-            }
-            
-            // Determine display name
-            let display = s.display || s.language;
-            if (code === 'ar') display = 'العربية (Arabic)';
-            else if (code === 'en') display = 'English';
-            else if (code === 'fr') display = 'Français (French)';
-            else if (code === 'es') display = 'Español (Spanish)';
-            else if (code === 'de') display = 'Deutsch (German)';
-            else if (code === 'tr') display = 'Türkçe (Turkish)';
-            else if (code === 'it') display = 'Italiano (Italian)';
-            else if (code === 'pt') display = 'Português (Portuguese)';
-            else if (code === 'ru') display = 'Русский (Russian)';
-            else if (code === 'hi') display = 'हिन्दी (Hindi)';
-            
+            // Normalize language code to short form
+            const code = (s.language || '').split(/[-_]/)[0].toLowerCase();
             if (!groups[code]) {
                 groups[code] = {
-                    display: display,
+                    display: s.display || s.language,
                     tracks: []
                 };
             }
-            
             // Avoid duplicate URLs in the same language group
             if (!groups[code].tracks.some(t => t.url === s.url)) {
                 groups[code].tracks.push(s);
@@ -507,15 +486,7 @@ const SubtitlesPanel: React.FC<{
     };
 
     const activeTrack = allSubtitles.find(t => t.url === activeSubtitleUrl);
-    
-    let activeLangCode: string | null = null;
-    if (activeTrack) {
-        const parts = (activeTrack.language || '').split('-');
-        activeLangCode = parts[0].toLowerCase();
-        if ((activeLangCode === 'qt' || activeLangCode === 'ai' || activeLangCode === 'mb') && parts[1]) {
-            activeLangCode = parts[1].toLowerCase();
-        }
-    }
+    const activeLangCode = activeTrack ? (activeTrack.language || '').split(/[-_]/)[0].toLowerCase() : null;
 
     // AI targets that have not been generated yet (generated ones appear as normal tracks above)
     const pendingAiLangs = (aiLangs || []).filter(l => !tracks.some(t => t.lang === `ai-${l.code}`));
@@ -541,13 +512,7 @@ const SubtitlesPanel: React.FC<{
 
                     {group.tracks.map((track, idx) => {
                         const isActive = activeSubtitleUrl === track.url;
-                        
-                        let labelText = track.release || track.filename || `Track ${idx + 1}`;
-                        // Clean up file extensions and dot-separated release names
-                        if (labelText.endsWith('.srt')) labelText = labelText.slice(0, -4);
-                        if (labelText.endsWith('.vtt')) labelText = labelText.slice(0, -4);
-                        labelText = labelText.replace(/\./g, ' ').replace(/_/g, ' ').trim();
-
+                        const labelText = track.release || track.filename || `Track ${idx + 1}`;
                         const subInfo = [
                             track.downloads ? `${track.downloads.toLocaleString()} downloads` : null,
                             track.rating ? `Rating: ${track.rating}/10` : null
@@ -582,17 +547,10 @@ const SubtitlesPanel: React.FC<{
                 
                 {Object.entries(grouped).map(([code, group]) => {
                     const isActive = activeLangCode === code;
-                    
-                    let activeLabelText = '';
-                    if (isActive && activeTrack) {
-                        let labelVal = activeTrack.release || activeTrack.filename || '';
-                        if (labelVal.endsWith('.srt')) labelVal = labelVal.slice(0, -4);
-                        if (labelVal.endsWith('.vtt')) labelVal = labelVal.slice(0, -4);
-                        labelVal = labelVal.replace(/\./g, ' ').replace(/_/g, ' ').trim();
-                        if (labelVal) {
-                            activeLabelText = ` (${labelVal})`;
-                        }
-                    }
+                    const isAutoMatched = isActive && activeTrack;
+                    const activeLabel = isAutoMatched && (activeTrack.release || activeTrack.filename)
+                        ? ` (${activeTrack.release || activeTrack.filename})`
+                        : '';
                     
                     return (
                         <button 
@@ -600,11 +558,11 @@ const SubtitlesPanel: React.FC<{
                             onClick={() => handleLanguageClick(code)} 
                             className={`player-panel-button justify-between ${isActive ? 'active' : ''}`}
                         >
-                            <span className="flex flex-col items-start text-left max-w-[70%]">
+                            <span className="flex flex-col items-start text-left">
                                 <span className="font-semibold">{group.display}</span>
-                                {isActive && activeLabelText && (
+                                {isActive && activeLabel && (
                                     <span className="text-[10px] text-zinc-400 font-mono mt-0.5 truncate max-w-[200px]">
-                                        {activeLabelText}
+                                        {activeLabel}
                                     </span>
                                 )}
                             </span>
@@ -639,7 +597,7 @@ const SubtitlesPanel: React.FC<{
                                 {aiLoadingLabel === lang.label
                                     ? <div className="w-3.5 h-3.5 border-2 border-zinc-400 border-t-white rounded-full animate-spin" />
                                     : <i className="fa-solid fa-wand-magic-sparkles text-xs text-purple-400" />}
-                             </button>
+                            </button>
                         ))}
                     </>
                 )}
@@ -1138,33 +1096,9 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const { addons } = useAddons();
     const addonPlayerConfig = useMemo(() => collectAddonPlayerConfig(addons), [addons]);
     const [addonSubtitles, setAddonSubtitles] = useState<SubtitleTrack[]>([]);
-    const unifiedSubtitlesList = useMemo(() => {
-        const list = [...subtitles, ...addonSubtitles].filter(s => s && s.url);
-        
-        // Add quick translated tracks
-        for (const qt of quickVttTracks) {
-            list.push({
-                language: qt.lang, // e.g. 'qt-ar'
-                display: qt.label, // e.g. '⚡ Arabic'
-                url: qt.url,       // blob URL
-                filename: `${qt.label.replace('⚡ ', '')} Quick Translation`,
-                release: 'Quick Translation',
-            });
-        }
-        
-        // Add AI translated tracks
-        for (const ai of aiVttTracks) {
-            list.push({
-                language: ai.lang, // e.g. 'ai-es'
-                display: ai.label, // e.g. '🤖 Spanish (AI)'
-                url: ai.url,       // blob URL
-                filename: `${ai.label.replace('🤖 ', '')} AI Translation`,
-                release: 'AI Translation',
-            });
-        }
-        
-        return list;
-    }, [subtitles, addonSubtitles, quickVttTracks, aiVttTracks]);
+    const rawSubtitlesList = useMemo(() => {
+        return [...subtitles, ...addonSubtitles].filter(s => s && s.url);
+    }, [subtitles, addonSubtitles]);
     const [aiVttTracks, setAiVttTracks] = useState<{ lang: string; url: string; label: string }[]>([]);
     const [aiSubLoadingLabel, setAiSubLoadingLabel] = useState<string | null>(null);
     // Quick (non-AI) subtitle translation: offered when the stream only has
@@ -1740,10 +1674,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             }
 
             const sub = [...subtitles, ...addonSubtitles].find(s => s && s.url === activeSubtitleUrl);
-            if (!sub) {
-                setVttTracks([]);
-                return;
-            }
+            if (!sub) return;
 
             const processSrtToVtt = (rawText: string) => {
                 const vttContent = normalizeSubtitleToVtt(rawText);
@@ -2646,7 +2577,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                     poster="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
                 >
                 {[...vttTracks, ...aiVttTracks, ...quickVttTracks].map(track => (
-                        <track key={`${track.lang}-${track.url}`} kind="subtitles" srcLang={track.lang} src={track.url} label={track.label} default={activeSubtitleLang === track.lang} />
+                        <track key={track.lang} kind="subtitles" srcLang={track.lang} src={track.url} label={track.label} default={activeSubtitleLang === track.lang} />
                     ))}
                 </video>
                 
@@ -2817,7 +2748,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
                 <SubtitlesPanel
                     show={showSubtitlesPanel}
-                    allSubtitles={unifiedSubtitlesList}
+                    allSubtitles={rawSubtitlesList}
                     activeSubtitleUrl={activeSubtitleUrl}
                     onSelectSubtitle={(sub) => {
                         if (!sub) {
