@@ -618,6 +618,25 @@ const SettingsPanel: React.FC<{
                     className="w-full h-2 bg-zinc-700 rounded-lg appearance-none cursor-pointer accent-[var(--primary)]"
                 />
             </div>
+
+            {/* Auto Timing Correction */}
+            <div className="mb-2 border-t border-white/10 pt-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex flex-col pr-2">
+                        <h4 className="text-sm font-semibold text-zinc-400">{t('autoTimingCorrection')}</h4>
+                        <p className="text-xs text-zinc-500 mt-1 leading-normal">{t('autoTimingCorrectionDesc')}</p>
+                    </div>
+                    <label className="relative inline-flex items-center cursor-pointer flex-shrink-0">
+                        <input
+                            type="checkbox"
+                            checked={!!subtitleSettings.autoTimingCorrection}
+                            onChange={(e) => onSubtitleSettingsChange({ autoTimingCorrection: e.target.checked })}
+                            className="sr-only peer"
+                        />
+                        <div className="w-11 h-6 bg-zinc-700 rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-0.5 after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[var(--primary)]"></div>
+                    </label>
+                </div>
+            </div>
         </div>
     );
 
@@ -937,7 +956,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         return FAST_TRANSLATE_LANGS.filter(l => !langs.has(l.code));
     }, [allSubtitles]);
     const [activeCues, setActiveCues] = useState<VTTCue[]>([]);
-    const defaultSubtitleSettings: SubtitleSettings = { fontSize: 100, backgroundOpacity: 0, edgeStyle: 'outline', verticalPosition: 10, timingOffset: 0 };
+    const defaultSubtitleSettings: SubtitleSettings = { fontSize: 100, backgroundOpacity: 0, edgeStyle: 'outline', verticalPosition: 10, timingOffset: 0, autoTimingCorrection: false };
     // Time Offset is intentionally NOT restored from saved settings: the right
     // offset differs from video to video, so every playback starts at 0.
     const [subtitleSettings, setSubtitleSettings] = useState<SubtitleSettings>(() => ({ ...getScreenSpecificData('subtitleSettings', defaultSubtitleSettings), timingOffset: 0 }));
@@ -1504,23 +1523,19 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 if (enSub && sub.language === enSub.language) continue;
 
                 try {
-                    // Fetch and keep the original moviebox translation
-                    const res = await fetch(sub.url);
-                    if (res.ok && active) {
-                        const originalSrt = await res.text();
-                        const originalVttUrl = processSrtToVtt(originalSrt);
-                        newTracks.push({ lang: sub.language, url: originalVttUrl, label: sub.display });
-                        if (active) setVttTracks([...newTracks]);
+                    let srtText = '';
+                    if (subtitleSettings.autoTimingCorrection && enSrtText) {
+                        const targetLangCode = (sub.language || '').split(/[-_]/)[0].toLowerCase();
+                        srtText = await translateSrtFast(enSrtText, targetLangCode);
+                    } else {
+                        const res = await fetch(sub.url);
+                        if (!res.ok || !active) continue;
+                        srtText = await res.text();
                     }
 
-                    // Also generate the auto-translated one from English for perfect timing
-                    if (enSrtText) {
-                        const targetLangCode = (sub.language || '').split(/[-_]/)[0].toLowerCase();
-                        const translatedSrtText = await translateSrtFast(enSrtText, targetLangCode);
-                        const autoVttUrl = processSrtToVtt(translatedSrtText);
-                        newTracks.push({ lang: `auto-${sub.language}`, url: autoVttUrl, label: `${sub.display} (Auto Timing)` });
-                        if (active) setVttTracks([...newTracks]);
-                    }
+                    const vttUrl = processSrtToVtt(srtText);
+                    newTracks.push({ lang: sub.language, url: vttUrl, label: sub.display });
+                    if (active) setVttTracks([...newTracks]);
                 } catch (e) { console.error(`Failed to process subtitle: ${sub.display}`, e); }
             }
         };
@@ -1532,7 +1547,7 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
             clearTimeout(timer);
             createdUrls.forEach(url => URL.revokeObjectURL(url));
         }
-    }, [allSubtitles]);
+    }, [allSubtitles, subtitleSettings.autoTimingCorrection]);
 
      useEffect(() => {
         const video = videoRef.current;
