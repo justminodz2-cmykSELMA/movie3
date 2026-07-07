@@ -1,46 +1,63 @@
 // ============================================================
 // Gemini subtitle translation service
 // ------------------------------------------------------------
-// Translates a full SRT subtitle file into a target language
-// with Gemini while preserving cue numbers and timestamps, so
-// the result can be rendered as a normal subtitle track in the
-// player's Subtitles panel. Used by the "AI Subtitles" addon.
+// Translates a full SRT/VTT subtitle file into a target language
+// with Gemini while preserving cue numbers and timestamps perfectly.
+// Used by the "AI Subtitles" addon.
 // ============================================================
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 
 const MODEL = "gemini-3.5-flash";
-const MAX_TOTAL_CHARS = 120_000;   // safety cap on very large subtitle files
-const CHUNK_CHAR_TARGET = 14_000;  // per-request payload target
-const MAX_CHUNKS = 8;
+const MAX_TOTAL_CUES = 1200; // safety cap on very large subtitle files
 
-/** Split an SRT file into chunks on cue boundaries (blank lines). */
-function chunkSrt(srt: string): string[] {
-  const cues = srt.replace(/\r/g, '').split(/\n\n+/).filter(c => c.trim());
-  const chunks: string[] = [];
-  let current: string[] = [];
-  let size = 0;
-  for (const cue of cues) {
-    if (size + cue.length > CHUNK_CHAR_TARGET && current.length > 0) {
-      chunks.push(current.join('\n\n'));
-      current = [];
-      size = 0;
-    }
-    current.push(cue);
-    size += cue.length + 2;
-  }
-  if (current.length) chunks.push(current.join('\n\n'));
-  return chunks.slice(0, MAX_CHUNKS);
+interface SubtitleCue {
+  index: string;      // cue number or identifier (if any, e.g. "1")
+  timing: string;     // the complete timing line, e.g., "00:00:06.120 --> 00:00:08.720"
+  text: string;       // the dialogue lines
 }
 
-/** Strip markdown fences Gemini sometimes wraps around raw output. */
-function stripFences(text: string): string {
-  return text.trim().replace(/^```[a-z]*\n?/i, '').replace(/\n?```$/, '').trim();
+/** Parse any SRT or WebVTT file into clean cues, keeping timings verbatim. */
+function parseSubtitles(content: string): SubtitleCue[] {
+  const normalized = content.replace(/\r/g, '');
+  const blocks = normalized.split(/\n\n+/);
+  const cues: SubtitleCue[] = [];
+  const timingRegex = /((?:\d{2}:)?\d{2}:\d{2}[,.]\d{3})\s*-->\s*((?:\d{2}:)?\d{2}:\d{2}[,.]\d{3})/;
+
+  for (const block of blocks) {
+    const lines = block.split('\n').map(l => l.trim()).filter(l => l !== '');
+    if (lines.length === 0) continue;
+    
+    // Find the timing line in this block
+    let timingIndex = -1;
+    for (let i = 0; i < lines.length; i++) {
+      if (timingRegex.test(lines[i])) {
+        timingIndex = i;
+        break;
+      }
+    }
+    
+    if (timingIndex === -1) {
+      // No timing line found (e.g., file headers or comments), safe to skip
+      continue;
+    }
+    
+    const timing = lines[timingIndex];
+    // Any line before the timing line is the index (or identifier)
+    const index = timingIndex > 0 ? lines.slice(0, timingIndex).join(' ') : '';
+    // Any line after the timing line is the dialogue text
+    const text = lines.slice(timingIndex + 1).join('\n');
+    
+    cues.push({ index, timing, text });
+    if (cues.length >= MAX_TOTAL_CUES) break;
+  }
+  
+  return cues;
 }
 
 /**
- * Translates SRT content into the target language with Gemini.
- * Returns a valid SRT string with identical timestamps.
+ * Translates subtitle content into the target language with Gemini.
+ * Returns a valid subtitle string with identical timestamps and structure.
  * Throws when the API key is missing or every chunk fails.
  */
 export const translateSrtWithGemini = async (
@@ -51,48 +68,102 @@ export const translateSrtWithGemini = async (
   if (!process.env.API_KEY) {
     throw new Error("Gemini API key not configured");
   }
-  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  
+  const ai = new GoogleGenAI({ 
+    apiKey: process.env.API_KEY,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      }
+    }
+  });
 
-  const chunks = chunkSrt(srtContent.slice(0, MAX_TOTAL_CHARS));
-  if (chunks.length === 0) throw new Error("Subtitle file is empty");
+  const cues = parseSubtitles(srtContent);
+  if (cues.length === 0) {
+    throw new Error("Subtitle file is empty or invalid");
+  }
 
-  const translated: string[] = [];
-  let failures = 0;
+  const BATCH_SIZE = 60; // Safe batch size for high-quality structured translations
+  const batches: SubtitleCue[][] = [];
+  for (let i = 0; i < cues.length; i += BATCH_SIZE) {
+    batches.push(cues.slice(i, i + BATCH_SIZE));
+  }
 
-  for (let i = 0; i < chunks.length; i++) {
-    const prompt = `You are a professional subtitle translator. Translate the dialogue text of the following SRT subtitle cues into ${targetLanguageLabel}.
+  const translatedTexts: string[] = new Array(cues.length);
+  // Pre-populate with original text as a fallback
+  for (let i = 0; i < cues.length; i++) {
+    translatedTexts[i] = cues[i].text;
+  }
 
+  let successes = 0;
+
+  for (let b = 0; b < batches.length; b++) {
+    const batch = batches[b];
+    const startIndex = b * BATCH_SIZE;
+    const textsToTranslate = batch.map(c => c.text);
+
+    const prompt = `You are an expert subtitle translator. Translate the following list of dialogue strings into ${targetLanguageLabel}.
+    
 STRICT RULES:
-- Keep every cue number and every timestamp line (e.g. "00:01:02,500 --> 00:01:04,000") EXACTLY as they are. Never change, merge, drop or reorder cues.
-- Translate ONLY the dialogue text lines.
-- Keep the translation natural, fluent and concise so it fits on screen.
-- Preserve italics tags like <i></i> and music notes (♪) if present.
-- Output the raw SRT content only — no explanations, no markdown fences.
-
-SRT CUES:
-"""
-${chunks[i]}
-"""`;
+1. Translate each dialogue string accurately and naturally into ${targetLanguageLabel}.
+2. Keep the translation concise, simple and natural so it fits on screen as a subtitle.
+3. Preserve HTML tags like <i></i>, <b></b> and music notes (♪) exactly as they are.
+4. Return a JSON array of strings containing EXACTLY the same number of elements (${textsToTranslate.length} elements) as the input array.
+5. The order of items in the output array must match the input array exactly. Do not skip, merge, or reorder any items.`;
 
     try {
       const response = await ai.models.generateContent({
         model: MODEL,
-        contents: prompt,
+        contents: [
+          { text: prompt },
+          { text: JSON.stringify(textsToTranslate) }
+        ],
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.STRING
+            }
+          }
+        }
       });
-      const text = stripFences(response.text || '');
-      if (text) translated.push(text);
-      else failures++;
+
+      const textOutput = response.text || '';
+      const parsed = JSON.parse(textOutput);
+      if (Array.isArray(parsed) && parsed.length === textsToTranslate.length) {
+        for (let j = 0; j < parsed.length; j++) {
+          translatedTexts[startIndex + j] = String(parsed[j]);
+        }
+        successes++;
+      } else {
+        console.warn(`Gemini batch ${b} returned length mismatch. Expected ${textsToTranslate.length}, got ${parsed?.length}.`);
+      }
     } catch (error) {
-      console.error("Gemini subtitle translation chunk failed:", error);
-      failures++;
-      // Keep the original cues for a failed chunk so timing stays intact.
-      translated.push(chunks[i]);
+      console.error(`Gemini subtitle translation batch ${b} failed:`, error);
     }
-    if (onProgress) onProgress(i + 1, chunks.length);
+
+    if (onProgress) {
+      onProgress(b + 1, batches.length);
+    }
   }
 
-  if (failures >= chunks.length) {
+  if (successes === 0) {
     throw new Error("AI subtitle translation failed");
   }
-  return translated.join('\n\n');
+
+  // Reconstruct the clean subtitle list
+  // Note: We intentionally omit any "WEBVTT" header here, because Player.tsx always prepends it itself.
+  // This completely avoids any double WEBVTT headers that corrupt subtitle rendering in the browser player!
+  return cues
+    .map((cue, i) => {
+      const text = translatedTexts[i];
+      if (cue.index) {
+        return `${cue.index}\n${cue.timing}\n${text}`;
+      } else {
+        return `${cue.timing}\n${text}`;
+      }
+    })
+    .join('\n\n') + '\n';
 };
+
