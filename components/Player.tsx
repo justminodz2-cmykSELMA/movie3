@@ -377,10 +377,57 @@ const SidePanel: React.FC<{
     );
 };
 
+// Helper function to find the best subtitle file from the list matching the stream URL:
+const matchSubtitleTrack = (streamUrl: string | null, tracks: SubtitleTrack[]): SubtitleTrack | null => {
+    if (tracks.length === 0) return null;
+    if (tracks.length === 1) return tracks[0];
+
+    if (!streamUrl) {
+        // If no stream URL, default to the one with the highest download count
+        return [...tracks].sort((a, b) => (b.downloads || 0) - (a.downloads || 0))[0];
+    }
+
+    // Try to find matching words
+    const urlLower = streamUrl.toLowerCase();
+    
+    // Score each track based on keyword matching and downloads
+    const scored = tracks.map(track => {
+        let score = 0;
+        const rel = (track.release || '').toLowerCase();
+        const file = (track.filename || '').toLowerCase();
+        
+        // Quality match
+        if (urlLower.includes('1080p') && (rel.includes('1080p') || file.includes('1080p'))) score += 10;
+        if (urlLower.includes('720p') && (rel.includes('720p') || file.includes('720p'))) score += 10;
+        if (urlLower.includes('bluray') && (rel.includes('bluray') || file.includes('bluray'))) score += 10;
+        if (urlLower.includes('webrip') && (rel.includes('webrip') || file.includes('webrip'))) score += 10;
+        if (urlLower.includes('web-dl') && (rel.includes('web-dl') || file.includes('web-dl') || rel.includes('webdl') || file.includes('webdl'))) score += 10;
+        if (urlLower.includes('hdtv') && (rel.includes('hdtv') || file.includes('hdtv'))) score += 10;
+        
+        // Group/Source match (e.g. YTS, RARBG, Tigole, FGT, Joy, Tigole, QxR, PSA, GalaxyRG)
+        const groups = ['yts', 'rarbg', 'fgt', 'joy', 'tigole', 'qxr', 'psa', 'galaxyrg', 'pahe', 'dvdrip', 'bdrip', 'brrip', 'hevc', 'x265', 'x264'];
+        for (const g of groups) {
+            if (urlLower.includes(g) && (rel.includes(g) || file.includes(g))) {
+                score += 30; // Strong match for release group or encoding source!
+            }
+        }
+        
+        // Add a small weight for downloads count to break ties
+        score += Math.min(5, (track.downloads || 0) / 10000);
+        
+        return { track, score };
+    });
+    
+    // Sort by score descending
+    scored.sort((a, b) => b.score - a.score);
+    return scored[0]?.track || tracks[0];
+};
+
 const SubtitlesPanel: React.FC<{
+    allSubtitles: SubtitleTrack[],
+    activeSubtitleUrl: string | null,
+    onSelectSubtitle: (sub: SubtitleTrack | null) => void,
     tracks: { lang: string; url: string; label: string }[],
-    activeLang: string | null,
-    onSelect: (lang: string | null) => void,
     onClose: () => void,
     triggerRef: React.RefObject<HTMLElement>,
     show: boolean,
@@ -390,27 +437,149 @@ const SubtitlesPanel: React.FC<{
     quickLangs?: { code: string; label: string }[],
     onQuickTranslate?: (code: string, label: string) => void,
     quickLoadingLabel?: string | null,
-}> = ({ tracks, activeLang, onSelect, onClose, triggerRef, show, aiLangs, onAiTranslate, aiLoadingLabel, quickLangs, onQuickTranslate, quickLoadingLabel }) => {
+}> = ({ allSubtitles, activeSubtitleUrl, onSelectSubtitle, tracks, onClose, triggerRef, show, aiLangs, onAiTranslate, aiLoadingLabel, quickLangs, onQuickTranslate, quickLoadingLabel }) => {
+    const [subView, setSubView] = useState<'languages' | 'files'>('languages');
+    const [selectedLangCode, setSelectedLangCode] = useState<string | null>(null);
 
     // Return focus on close
     useEffect(() => {
         if (!show) {
             setTimeout(() => triggerRef.current?.focus(), 50);
+            setSubView('languages');
+            setSelectedLangCode(null);
         }
     }, [show, triggerRef]);
+
+    // Group raw subtitles by language display/code
+    const grouped = useMemo(() => {
+        const groups: Record<string, { display: string, tracks: SubtitleTrack[] }> = {};
+        for (const s of allSubtitles) {
+            if (!s || !s.url) continue;
+            // Normalize language code to short form
+            const code = (s.language || '').split(/[-_]/)[0].toLowerCase();
+            if (!groups[code]) {
+                groups[code] = {
+                    display: s.display || s.language,
+                    tracks: []
+                };
+            }
+            // Avoid duplicate URLs in the same language group
+            if (!groups[code].tracks.some(t => t.url === s.url)) {
+                groups[code].tracks.push(s);
+            }
+        }
+        return groups;
+    }, [allSubtitles]);
+
+    const handleLanguageClick = (code: string) => {
+        const group = grouped[code];
+        if (!group) return;
+        if (group.tracks.length <= 1) {
+            // Only 1 file, select it directly
+            onSelectSubtitle(group.tracks[0]);
+            onClose();
+        } else {
+            // Multiple files, open the file selector sub-view
+            setSelectedLangCode(code);
+            setSubView('files');
+        }
+    };
+
+    const activeTrack = allSubtitles.find(t => t.url === activeSubtitleUrl);
+    const activeLangCode = activeTrack ? (activeTrack.language || '').split(/[-_]/)[0].toLowerCase() : null;
 
     // AI targets that have not been generated yet (generated ones appear as normal tracks above)
     const pendingAiLangs = (aiLangs || []).filter(l => !tracks.some(t => t.lang === `ai-${l.code}`));
     // Quick-translate targets that have not been generated yet
     const pendingQuickLangs = (quickLangs || []).filter(l => !tracks.some(t => t.lang === `qt-${l.code}`));
 
+    if (subView === 'files' && selectedLangCode && grouped[selectedLangCode]) {
+        const group = grouped[selectedLangCode];
+        return (
+            <SidePanel title={`${group.display} Subtitles`} onClose={onClose} show={show}>
+                <div className="flex flex-col gap-2">
+                    <button 
+                        onClick={() => { setSubView('languages'); setSelectedLangCode(null); }}
+                        className="player-panel-button flex items-center gap-2 text-zinc-400 hover:text-white mb-2"
+                    >
+                        <i className="fa-solid fa-arrow-left text-xs"></i>
+                        <span>Back to Languages</span>
+                    </button>
+                    
+                    <div className="text-xs text-zinc-500 px-1 mb-2">
+                        Select a subtitle file. If timing is mismatched, try another file below:
+                    </div>
+
+                    {group.tracks.map((track, idx) => {
+                        const isActive = activeSubtitleUrl === track.url;
+                        const labelText = track.release || track.filename || `Track ${idx + 1}`;
+                        const subInfo = [
+                            track.downloads ? `${track.downloads.toLocaleString()} downloads` : null,
+                            track.rating ? `Rating: ${track.rating}/10` : null
+                        ].filter(Boolean).join(' · ');
+
+                        return (
+                            <button 
+                                key={track.url} 
+                                onClick={() => { onSelectSubtitle(track); onClose(); }} 
+                                className={`player-panel-button flex flex-col items-start gap-1 p-3 text-left ${isActive ? 'active border-[var(--primary)]' : ''}`}
+                            >
+                                <span className="text-sm font-medium leading-tight text-white block truncate w-full">
+                                    {labelText}
+                                </span>
+                                {subInfo && (
+                                    <span className="text-[10px] text-zinc-500 font-mono">
+                                        {subInfo}
+                                    </span>
+                                )}
+                            </button>
+                        );
+                    })}
+                </div>
+            </SidePanel>
+        );
+    }
+
     return (
         <SidePanel title="Subtitles" onClose={onClose} show={show}>
             <div className="flex flex-col gap-2">
-                <button onClick={() => { onSelect(null); onClose(); }} className={`player-panel-button ${!activeLang ? 'active' : ''}`}>Off</button>
-                {tracks.map(track => (
-                    <button key={track.lang} onClick={() => { onSelect(track.lang); onClose(); }} className={`player-panel-button ${activeLang === track.lang ? 'active' : ''}`}>{track.label}</button>
-                ))}
+                <button onClick={() => { onSelectSubtitle(null); onClose(); }} className={`player-panel-button ${!activeSubtitleUrl ? 'active' : ''}`}>Off</button>
+                
+                {Object.entries(grouped).map(([code, group]) => {
+                    const isActive = activeLangCode === code;
+                    const isAutoMatched = isActive && activeTrack;
+                    const activeLabel = isAutoMatched && (activeTrack.release || activeTrack.filename)
+                        ? ` (${activeTrack.release || activeTrack.filename})`
+                        : '';
+                    
+                    return (
+                        <button 
+                            key={code} 
+                            onClick={() => handleLanguageClick(code)} 
+                            className={`player-panel-button justify-between ${isActive ? 'active' : ''}`}
+                        >
+                            <span className="flex flex-col items-start text-left">
+                                <span className="font-semibold">{group.display}</span>
+                                {isActive && activeLabel && (
+                                    <span className="text-[10px] text-zinc-400 font-mono mt-0.5 truncate max-w-[200px]">
+                                        {activeLabel}
+                                    </span>
+                                )}
+                            </span>
+                            <span className="text-xs text-zinc-500 flex items-center gap-1">
+                                {group.tracks.length > 1 ? (
+                                    <>
+                                        <span>{group.tracks.length} files</span>
+                                        <i className="fa-solid fa-chevron-right text-[10px]"></i>
+                                    </>
+                                ) : (
+                                    <span>1 file</span>
+                                )}
+                            </span>
+                        </button>
+                    );
+                })}
+
                 {pendingAiLangs.length > 0 && onAiTranslate && (
                     <>
                         <div className="flex items-center gap-2 mt-3 mb-1 px-1">
@@ -921,11 +1090,15 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
     const [subtitles, setSubtitles] = useState<SubtitleTrack[]>([]);
     const [vttTracks, setVttTracks] = useState<{ lang: string; url: string; label: string }[]>([]);
     const [activeSubtitleLang, setActiveSubtitleLang] = useState<string | null>(null);
+    const [activeSubtitleUrl, setActiveSubtitleUrl] = useState<string | null>(null);
 
     // ---- Addon platform: subtitle sources, AI translate & auto-skip (all optional, best-effort) ----
     const { addons } = useAddons();
     const addonPlayerConfig = useMemo(() => collectAddonPlayerConfig(addons), [addons]);
     const [addonSubtitles, setAddonSubtitles] = useState<SubtitleTrack[]>([]);
+    const rawSubtitlesList = useMemo(() => {
+        return [...subtitles, ...addonSubtitles].filter(s => s && s.url);
+    }, [subtitles, addonSubtitles]);
     const [aiVttTracks, setAiVttTracks] = useState<{ lang: string; url: string; label: string }[]>([]);
     const [aiSubLoadingLabel, setAiSubLoadingLabel] = useState<string | null>(null);
     // Quick (non-AI) subtitle translation: offered when the stream only has
@@ -1489,11 +1662,20 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [addonSubtitles, subtitles]);
 
-    // Effect 3: Process subtitles
+    // Effect 3: Process the selected active subtitle track
     useEffect(() => {
         let active = true;
         let createdUrls: string[] = [];
-        const processSubtitles = async () => {
+
+        const processActiveSubtitle = async () => {
+            if (!activeSubtitleUrl) {
+                setVttTracks([]);
+                return;
+            }
+
+            const sub = [...subtitles, ...addonSubtitles].find(s => s && s.url === activeSubtitleUrl);
+            if (!sub) return;
+
             const processSrtToVtt = (rawText: string) => {
                 const vttContent = normalizeSubtitleToVtt(rawText);
                 const blob = new Blob([vttContent], { type: 'text/vtt' });
@@ -1502,52 +1684,83 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
                 return vttUrl;
             };
 
-            const newTracks: { lang: string; url: string; label: string }[] = [];
-            
-            const enSub = allSubtitles.find(s => (s.language || '').split(/[-_]/)[0].toLowerCase() === 'en');
-            let enSrtText: string | null = null;
-            if (enSub) {
-                try {
-                    const res = await fetch(enSub.url);
-                    if (res.ok && active) enSrtText = await res.text();
-                } catch (e) { console.error("Failed to fetch English subtitle", e); }
-            }
+            try {
+                let srtText = '';
 
-            if (enSub && enSrtText) {
-                const vttUrl = processSrtToVtt(enSrtText);
-                newTracks.push({ lang: enSub.language, url: vttUrl, label: enSub.display });
-                if (active) setVttTracks([...newTracks]);
-            }
-
-            for (const sub of allSubtitles) {
-                if (enSub && sub.language === enSub.language) continue;
-
-                try {
-                    let srtText = '';
-                    if (subtitleSettings.autoTimingCorrection && enSrtText) {
-                        const targetLangCode = (sub.language || '').split(/[-_]/)[0].toLowerCase();
-                        srtText = await translateSrtFast(enSrtText, targetLangCode);
-                    } else {
-                        const res = await fetch(sub.url);
-                        if (!res.ok || !active) continue;
-                        srtText = await res.text();
+                // If auto timing translation is ON, we use translated English
+                if (subtitleSettings.autoTimingCorrection && sub.language !== 'en') {
+                    const enSub = [...subtitles, ...addonSubtitles].find(s => s && (s.language || '').split(/[-_]/)[0].toLowerCase() === 'en');
+                    if (enSub) {
+                        try {
+                            const res = await fetch(enSub.url);
+                            if (res.ok && active) {
+                                const enSrtText = await res.text();
+                                const targetLangCode = (sub.language || '').split(/[-_]/)[0].toLowerCase();
+                                srtText = await translateSrtFast(enSrtText, targetLangCode);
+                            }
+                        } catch (e) {
+                            console.error("Failed to fetch/translate English subtitle", e);
+                        }
                     }
+                }
 
+                // Fallback to direct fetching
+                if (!srtText) {
+                    const res = await fetch(activeSubtitleUrl);
+                    if (!res.ok || !active) return;
+                    srtText = await res.text();
+                }
+
+                if (active) {
                     const vttUrl = processSrtToVtt(srtText);
-                    newTracks.push({ lang: sub.language, url: vttUrl, label: sub.display });
-                    if (active) setVttTracks([...newTracks]);
-                } catch (e) { console.error(`Failed to process subtitle: ${sub.display}`, e); }
+                    setVttTracks([{ lang: sub.language, url: vttUrl, label: sub.display }]);
+                }
+            } catch (e) {
+                console.error(`Failed to process active subtitle: ${sub.display}`, e);
             }
         };
+
         const timer = setTimeout(() => {
-            if (allSubtitles.length > 0) processSubtitles(); else setVttTracks([]);
-        }, 1500);
+            processActiveSubtitle();
+        }, 500);
+
         return () => {
             active = false;
             clearTimeout(timer);
             createdUrls.forEach(url => URL.revokeObjectURL(url));
+        };
+    }, [activeSubtitleUrl, subtitleSettings.autoTimingCorrection, subtitles, addonSubtitles]);
+
+    // Auto-select the best subtitle track on load or when subtitles / language changes
+    useEffect(() => {
+        const rawList = [...subtitles, ...addonSubtitles].filter(s => s && s.url);
+        if (rawList.length === 0) return;
+
+        // Determine target language: default to userLanguage, fallback to 'en' or first available
+        let targetLang = userLanguage === 'ar' ? 'ar' : 'en';
+        let matches = rawList.filter(s => s.language === targetLang || (s.language || '').startsWith(targetLang));
+
+        if (matches.length === 0) {
+            // Fallback to English if target is Arabic and not found
+            if (targetLang === 'ar') {
+                targetLang = 'en';
+                matches = rawList.filter(s => s.language === targetLang || (s.language || '').startsWith(targetLang));
+            }
         }
-    }, [allSubtitles, subtitleSettings.autoTimingCorrection]);
+
+        if (matches.length === 0) {
+            // Just take the first available subtitle track
+            matches = [rawList[0]];
+        }
+
+        if (matches.length > 0) {
+            const bestTrack = matchSubtitleTrack(activeStreamUrl, matches);
+            if (bestTrack) {
+                setActiveSubtitleLang(bestTrack.language);
+                setActiveSubtitleUrl(bestTrack.url);
+            }
+        }
+    }, [subtitles, addonSubtitles, userLanguage, activeStreamUrl]);
 
      useEffect(() => {
         const video = videoRef.current;
@@ -2535,9 +2748,18 @@ const VideoPlayer: React.FC<PlayerProps> = ({ item, itemType, initialSeason, ini
 
                 <SubtitlesPanel
                     show={showSubtitlesPanel}
+                    allSubtitles={rawSubtitlesList}
+                    activeSubtitleUrl={activeSubtitleUrl}
+                    onSelectSubtitle={(sub) => {
+                        if (!sub) {
+                            setActiveSubtitleLang(null);
+                            setActiveSubtitleUrl(null);
+                        } else {
+                            setActiveSubtitleLang(sub.language);
+                            setActiveSubtitleUrl(sub.url);
+                        }
+                    }}
                     tracks={[...vttTracks, ...aiVttTracks, ...quickVttTracks]}
-                    activeLang={activeSubtitleLang}
-                    onSelect={setActiveSubtitleLang}
                     onClose={() => setShowSubtitlesPanel(false)}
                     triggerRef={subtitlesButtonRef}
                     aiLangs={addonPlayerConfig.aiTranslate}
