@@ -58,7 +58,7 @@ const scheduleSchema = {
 const PlayerPage: React.FC = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { item: initialItem, type, season: initialSeason, episode: initialEpisode, currentTime: initialCurrentTime, streamUrl, liveChannels, currentChannelIndex, logo, needsProxy, hideLogo } = location.state || {};
+    const { item: initialItem, type, season: initialSeason, episode: initialEpisode, currentTime: initialCurrentTime, streamUrl: initialStreamUrlState, liveChannels, currentChannelIndex, logo, needsProxy, hideLogo } = location.state || {};
     const { setToast, updateHistory, getScreenSpecificData, isKidsMode } = useProfile();
     const { t } = useTranslation();
     const { setPipData, setPipAnchor } = usePlayer();
@@ -67,6 +67,7 @@ const PlayerPage: React.FC = () => {
     const [currentSeason, setCurrentSeason] = useState<number | undefined>(initialSeason);
     const [currentEpisode, setCurrentEpisode] = useState<Episode | null>(initialEpisode);
     const [currentTime, setCurrentTime] = useState<number>(initialCurrentTime || 0);
+    const [currentStreamUrl, setCurrentStreamUrl] = useState<string | null>(initialStreamUrlState || null);
     const [episodes, setEpisodes] = useState<Episode[]>([]);
     const [loading, setLoading] = useState(true);
 
@@ -82,7 +83,9 @@ const PlayerPage: React.FC = () => {
         setCurrentSeason(initialSeason);
         setCurrentEpisode(initialEpisode);
         setCurrentTime(initialCurrentTime || 0);
-    }, [initialItem?.id, initialSeason, initialEpisode?.id, initialCurrentTime]);
+        setSelectedProvider(null);
+        setCurrentStreamUrl(initialStreamUrlState || null);
+    }, [initialItem?.id, initialSeason, initialEpisode?.id, initialCurrentTime, initialStreamUrlState]);
     
     const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
     const [isFetchingStream, setIsFetchingStream] = useState(true);
@@ -259,7 +262,7 @@ const PlayerPage: React.FC = () => {
         const fetchAllData = async () => {
             setLoading(true);
             try {
-                const data = streamUrl ? initialItem : await fetchFromTMDB(`/${type}/${initialItem.id}`, { append_to_response: 'seasons' });
+                const data = currentStreamUrl ? initialItem : await fetchFromTMDB(`/${type}/${initialItem.id}`, { append_to_response: 'seasons' });
                 setItem(data);
                 
                 if (type === 'tv') {
@@ -282,7 +285,7 @@ const PlayerPage: React.FC = () => {
                 }
             } catch (error) {
                 console.error("Failed to fetch player page data:", error);
-                if (!streamUrl) {
+                if (!currentStreamUrl) {
                     setToast({ message: t('failedToLoadDetails'), type: 'error' });
                 }
             } finally {
@@ -292,14 +295,14 @@ const PlayerPage: React.FC = () => {
 
         fetchAllData();
 
-    }, [initialItem?.id, type, initialSeason, initialEpisode, streamUrl, navigate, setPipData, setToast, t, isCineTvKids]);
+    }, [initialItem?.id, type, initialSeason, initialEpisode, currentStreamUrl, navigate, setPipData, setToast, t, isCineTvKids]);
     
      useEffect(() => {
         const video = videoNode;
         let interval: NodeJS.Timeout | null = null;
 
         const saveHistory = () => {
-            if (video && item && video.duration > 0 && video.currentTime > 60 && !streamUrl && !isCineTvKids) {
+            if (video && item && video.duration > 0 && video.currentTime > 60 && !currentStreamUrl && !isCineTvKids) {
                 const progress = (video.currentTime / video.duration) * 100;
                 if (progress < 95) {
                     const historyItem: HistoryItem = {
@@ -327,11 +330,13 @@ const PlayerPage: React.FC = () => {
             if (interval) clearInterval(interval);
             saveHistory();
         };
-    }, [videoNode, item, type, currentSeason, currentEpisode, updateHistory, streamUrl, isCineTvKids]);
+    }, [videoNode, item, type, currentSeason, currentEpisode, updateHistory, currentStreamUrl, isCineTvKids]);
 
     const handleEpisodeSelect = (episode: Episode) => {
         setCurrentEpisode(episode);
         setCurrentTime(0);
+        setSelectedProvider(null);
+        setCurrentStreamUrl(null);
     };
     
     const handleEnterPip = (url: string, time: number, playing: boolean, dimensions: DOMRect) => {
@@ -401,7 +406,7 @@ const PlayerPage: React.FC = () => {
                 initialSeason={currentSeason}
                 initialEpisode={currentEpisode}
                 initialTime={currentTime}
-                initialStreamUrl={streamUrl}
+                initialStreamUrl={currentStreamUrl}
                 onEnterPip={handleEnterPip}
                 selectedProvider={selectedProvider}
                 onProviderSelected={handleProviderSelected}
