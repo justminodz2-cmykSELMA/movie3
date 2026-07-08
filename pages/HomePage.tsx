@@ -372,6 +372,7 @@ const PosterCard: React.FC<{
 
   const handleMouseEnter = useCallback(() => {
     onItemFocus?.();
+    setIsFocused(true);
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     hoverTimeoutRef.current = setTimeout(() => {
       // A simple querySelector check to ensure the element is still hovered by the user
@@ -384,11 +385,12 @@ const PosterCard: React.FC<{
         setShowVideo(true);
       }
     }, 7000); // 7-second delay as requested
-  }, [movie.id]);
+  }, [movie.id, onItemFocus]);
 
   const handleMouseLeave = useCallback(() => {
     if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
     setShowVideo(false);
+    setIsFocused(false);
   }, []);
 
   useEffect(() => {
@@ -497,7 +499,7 @@ const PosterCard: React.FC<{
             N
           </span>
         )}
-        <div className="relative w-full aspect-video bg-black">
+        <div className="relative w-full aspect-video bg-black rounded-lg overflow-hidden" onClick={() => onCardClick(movie)}>
           <img
             src={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${movie.backdrop_path}`}
             alt={movie.title || movie.name}
@@ -527,52 +529,17 @@ const PosterCard: React.FC<{
               </div>
             )}
           </div>
-        </div>
-        <div className="quick-view bg-[var(--surface)] px-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <button
-                onClick={() =>
-                  navigate("/player", { state: { item: movie, type } })
-                }
-                className="w-9 h-9 flex items-center justify-center text-black bg-white rounded-full text-lg btn-press"
-              >
-                <i className="fas fa-play"></i>
-              </button>
-              <button className="w-9 h-9 flex items-center justify-center text-white border-2 border-zinc-500 rounded-full text-lg btn-press hover:border-white">
-                <i className="fas fa-plus"></i>
-              </button>
-              <button className="w-9 h-9 flex items-center justify-center text-white border-2 border-zinc-500 rounded-full text-lg btn-press hover:border-white">
-                <i className="far fa-thumbs-up"></i>
-              </button>
+          <div className="absolute top-2 left-2 flex flex-col gap-1 z-10 pointer-events-none">
+            <div className={`transform transition-all duration-300 ease-out ${isFocused ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'}`}>
+              <span className="px-2 py-0.5 text-[11px] font-bold text-white bg-green-600 rounded-sm shadow-md">
+                {(movie.vote_average * 10).toFixed(0)}% {t('match')}
+              </span>
             </div>
-            <button
-              onClick={() => onCardClick(movie)}
-              className="w-9 h-9 flex items-center justify-center text-white border-2 border-zinc-500 rounded-full text-lg btn-press hover:border-white"
-            >
-              <i className="fas fa-chevron-down"></i>
-            </button>
-          </div>
-          <div className="flex items-center flex-wrap gap-2 text-xs mt-3 text-zinc-300">
-            <span className="font-bold text-green-500">
-              {(movie.vote_average * 10).toFixed(0)}% {t("match")}
-            </span>
-            <span className="px-1.5 py-0.5 border border-white/40 text-[10px] rounded">
-              U/A 16+
-            </span>
-            <span className="whitespace-nowrap">
-              {type === "tv" ? "4 Seasons" : "2h 15m"}
-            </span>
-            <span className="px-1.5 py-0.5 border border-white/40 text-[10px] rounded">
-              HD
-            </span>
-          </div>
-          <div className="flex items-center gap-2 text-xs mt-2 text-zinc-200">
-            <span>Sci-Fi TV</span>
-            <span className="text-zinc-600 text-[6px]">&#9679;</span>
-            <span>Teen TV Shows</span>
-            <span className="text-zinc-600 text-[6px]">&#9679;</span>
-            <span>Horror</span>
+            <div className={`transform transition-all duration-300 ease-out delay-75 ${isFocused ? 'translate-y-0 opacity-100 scale-100' : '-translate-y-4 opacity-0 scale-95'}`}>
+              <span className="px-2 py-0.5 text-[11px] font-bold text-white bg-black/60 backdrop-blur-sm rounded-sm shadow-md border border-white/20">
+                {movie.release_date?.substring(0, 4) || movie.first_air_date?.substring(0, 4)}
+              </span>
+            </div>
           </div>
         </div>
         {isRecentlyAdded && (
