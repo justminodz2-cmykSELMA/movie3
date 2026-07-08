@@ -76,7 +76,7 @@ const AmbientBackground: React.FC<{ imageUrl: string | null }> = ({
           src={displayImage}
           alt=""
           className="w-full h-full object-cover pointer-events-none"
-        />
+         loading="lazy" decoding="async" />
       </div>
 
       {/* Background gradients for excellent reading contrast & blending */}
@@ -163,7 +163,7 @@ const Hero: React.FC<{
         alt={slide.titleText}
         className="absolute inset-0 w-full h-full object-cover"
         style={{ animation: "heroBackdropFade 1s ease-in-out" }}
-      />
+       loading="eager" decoding="async" />
       {/* Gradients for readability and cinematic effect */}
       <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)]/80 via-transparent to-transparent"></div>
       <div className="absolute inset-0 bg-gradient-to-r from-black to-transparent"></div>
@@ -187,7 +187,7 @@ const Hero: React.FC<{
               src={slide.logoUrl}
               alt={`${slide.titleText} Title`}
               className="w-full max-w-md md:max-w-lg max-h-52 object-contain object-left drop-shadow-lg mb-4"
-            />
+             loading="eager" decoding="async" />
           ) : (
             <h1
               className="text-4xl md:text-6xl font-black drop-shadow-lg mb-4 uppercase"
@@ -971,7 +971,7 @@ const LiveTvCard: React.FC<{
           <img
             src={channel.logo}
             alt={channel.name}
-            onError={() => setImgError(true)}
+            loading="lazy" decoding="async" onError={() => setImgError(true)}
             className="w-3/5 h-3/5 object-contain relative z-10 opacity-90 group-hover:opacity-100 transition-all duration-300 drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]"
           />
         ) : (
@@ -994,7 +994,7 @@ const InteractiveAdBanner: React.FC = () => {
         src="https://i.ibb.co/MkzkRg7B/0608-merchandising-film.jpg"
         alt="Promo Banner"
         className="w-full h-full object-cover pointer-events-none"
-      />
+       loading="lazy" decoding="async" />
     </div>
   );
 };

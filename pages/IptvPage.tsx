@@ -80,7 +80,7 @@ const Hero: React.FC<{ slide: HeroSlide; onPlay: () => void }> = ({ slide, onPla
         alt={slide.titleText}
         className="absolute inset-0 w-full h-full object-cover"
         style={{ animation: "heroBackdropFade 1s ease-in-out" }}
-      />
+       loading="lazy" decoding="async" />
       <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)]/80 via-transparent to-transparent"></div>
       <div className="absolute inset-0 bg-gradient-to-r from-black to-transparent"></div>
       <div className="absolute inset-0 bg-gradient-to-l from-[var(--background)]/50 to-transparent"></div>
@@ -92,7 +92,7 @@ const Hero: React.FC<{ slide: HeroSlide; onPlay: () => void }> = ({ slide, onPla
             src={slide.logoUrl}
             alt=""
             className="w-48 h-48 md:w-[450px] md:h-[450px] object-contain"
-            onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+            loading="lazy" decoding="async" onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
           />
         </div>
       )}
@@ -117,7 +117,7 @@ const Hero: React.FC<{ slide: HeroSlide; onPlay: () => void }> = ({ slide, onPla
                 src={slide.logoUrl}
                 alt={slide.titleText}
                 className="h-20 md:h-28 max-w-[280px] md:max-w-[400px] object-contain drop-shadow-lg"
-                onError={() => setLogoFailed(true)}
+                loading="lazy" decoding="async" onError={() => setLogoFailed(true)}
               />
             ) : (
               <h1
@@ -208,7 +208,7 @@ const IptvCard: React.FC<{
           <img
             src={channel.logo}
             alt={channel.name}
-            onError={() => setImgError(true)}
+            loading="lazy" decoding="async" onError={() => setImgError(true)}
             className="w-3/5 h-3/5 object-contain relative z-10 opacity-90 group-hover:opacity-100 transition-all duration-300 drop-shadow-[0_10px_20px_rgba(0,0,0,0.8)]"
           />
         ) : (

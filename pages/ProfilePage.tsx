@@ -129,7 +129,7 @@ const ProfileCard: React.FC<{
                     </motion.div>
                 )}
                 <div className="relative z-10 w-full h-full rounded-md overflow-hidden bg-[var(--surface)]">
-                    <img src={profile.avatar} alt={profile.name} className={imageClasses} />
+                    <img src={profile.avatar} alt={profile.name} className={imageClasses}  loading="lazy" decoding="async" />
                     {isManaging && (
                         <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
                             <i className="fas fa-pencil-alt text-4xl text-white"></i>
@@ -151,7 +151,7 @@ const AvatarGrid: React.FC<{ onSelect: (avatar: string) => void; onBack: () => v
                      src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
                      alt="Logo" 
                      className="w-14 h-14 object-contain" 
-                 />
+                  loading="lazy" decoding="async" />
              </div>
             <div className="w-full max-w-5xl mt-24">
                  <button onClick={onBack} className="flex items-center gap-2 text-zinc-300 hover:text-white transition-colors text-lg mb-4 focusable">
@@ -175,7 +175,7 @@ const AvatarGrid: React.FC<{ onSelect: (avatar: string) => void; onBack: () => v
                         }} 
                         className="aspect-square rounded-md overflow-hidden cursor-pointer transition-transform hover:scale-110 border-4 border-transparent hover:border-white focusable focus:scale-110 focus:border-white outline-none"
                     >
-                        <img src={avatar} alt="avatar" className="w-full h-full object-cover"/>
+                        <img src={avatar} alt="avatar" className="w-full h-full object-cover" loading="lazy" decoding="async" />
                     </div>
                 ))}
             </div>
@@ -356,7 +356,7 @@ const ProfilePage: React.FC = () => {
                             src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
                             alt="Logo" 
                             className="w-14 h-14 object-contain" 
-                        />
+                         loading="lazy" decoding="async" />
                     </div>
                     <form onSubmit={handleSaveForm} className="w-full max-w-2xl">
                         <h1 className="text-4xl md:text-5xl font-normal mb-6">{t('editProfile')}</h1>
@@ -374,7 +374,7 @@ const ProfilePage: React.FC = () => {
                                         }
                                     }}
                                 >
-                                    <img src={avatar} alt="Profile Avatar" className="w-28 h-28 md:w-36 md:h-36 rounded-md object-cover" />
+                                    <img src={avatar} alt="Profile Avatar" className="w-28 h-28 md:w-36 md:h-36 rounded-md object-cover"  loading="lazy" decoding="async" />
                                     <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity rounded-md">
                                         <i className="fas fa-pencil-alt text-2xl text-white"></i>
                                     </div>
@@ -464,7 +464,7 @@ const ProfilePage: React.FC = () => {
                             src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
                             alt="Logo" 
                             className="w-14 h-14 object-contain" 
-                        />
+                         loading="lazy" decoding="async" />
                     </div>
                     <form onSubmit={handleSaveForm} className="w-full max-w-2xl">
                         <h1 className="text-4xl md:text-5xl font-normal">{t('addProfile')}</h1>
@@ -482,7 +482,7 @@ const ProfilePage: React.FC = () => {
                                     }
                                 }}
                             >
-                                <img src={avatar} alt="Profile Avatar" className="w-28 h-28 md:w-36 md:h-36 rounded-md object-cover flex-shrink-0" />
+                                <img src={avatar} alt="Profile Avatar" className="w-28 h-28 md:w-36 md:h-36 rounded-md object-cover flex-shrink-0"  loading="lazy" decoding="async" />
                                 <div className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity rounded-md">
                                     <i className="fas fa-pencil-alt text-2xl text-white"></i>
                                 </div>

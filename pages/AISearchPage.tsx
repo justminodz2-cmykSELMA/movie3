@@ -32,7 +32,7 @@ const AILogo: React.FC = () => {
         <img 
             src="/ai-logo.png" 
             alt="AI" 
-            onError={() => setImgErr(true)}
+            loading="lazy" decoding="async" onError={() => setImgErr(true)}
             className="w-8 h-8 flex-shrink-0 rounded-full object-cover" 
             referrerPolicy="no-referrer"
         />
@@ -160,7 +160,7 @@ const SearchResultCard: React.FC<{ movie: Movie; index: number }> = ({ movie, in
                     src={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${movie.backdrop_path}`} 
                     alt={movie.title || movie.name}
                     className="w-full h-auto object-cover aspect-video"
-                />
+                 loading="lazy" decoding="async" />
                  <div className="quick-view bg-[var(--surface)] px-3">
                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">

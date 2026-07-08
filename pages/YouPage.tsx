@@ -22,7 +22,7 @@ const ProfileHeader: React.FC<{ profile: any; onSearch: () => void; onSettings: 
     return (
         <header className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-                <img src={profile.avatar} alt="Profile Avatar" className="w-16 h-16 rounded-full border-2 border-zinc-700" />
+                <img src={profile.avatar} alt="Profile Avatar" className="w-16 h-16 rounded-full border-2 border-zinc-700"  loading="lazy" decoding="async" />
                 <div>
                     <h1 className="text-2xl font-bold text-white">{profile.name}</h1>
                     <p className="text-sm text-gray-400">@{profile.name.toLowerCase().replace(/\s/g, '')} • <span className="text-blue-400 cursor-pointer hover:underline">{t('viewChannel')}</span></p>
@@ -97,7 +97,7 @@ const ResumeCard: React.FC<{ item: HistoryItem }> = ({ item }) => {
 
     return (
         <div onClick={handleDetails} className="relative w-full overflow-hidden cursor-pointer group rounded-xl bg-zinc-800 shadow-xl interactive-card">
-            <img src={item.itemImage} alt={item.title} className="w-full h-full object-cover" />
+            <img src={item.itemImage} alt={item.title} className="w-full h-full object-cover"  loading="lazy" decoding="async" />
             <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/50 to-transparent"></div>
             <div className="absolute inset-0 p-4 flex flex-col justify-end">
                 <p className="text-sm font-bold text-red-400 drop-shadow">{t('continueWatching')}</p>
@@ -146,7 +146,7 @@ const HistoryCard: React.FC<{ item: HistoryItem, index: number }> = ({ item, ind
             data-is-live="false"
         >
             <div className="relative w-40 flex-shrink-0 overflow-hidden rounded-lg shadow-lg aspect-video interactive-card">
-                <img src={item.itemImage} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105" />
+                <img src={item.itemImage} alt={item.title} className="w-full h-full object-cover transition-transform group-hover:scale-105"  loading="lazy" decoding="async" />
                 <div className="absolute bottom-1 right-1 px-1.5 py-0.5 text-xs font-bold text-white bg-black/60 rounded-sm">{formatTime(item.duration)}</div>
                 <div className="absolute bottom-0 left-0 w-full h-1 bg-white/30">
                     <div className="h-full bg-red-600" style={{ width: `${progress}%` }}></div>

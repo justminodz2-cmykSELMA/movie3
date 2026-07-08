@@ -229,7 +229,7 @@ const DetailsPage: React.FC = () => {
           sizes="100vw"
           alt={item.title || item.name}
           className="absolute inset-0 object-cover object-top w-full h-full"
-        />
+         loading="lazy" decoding="async" />
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent"></div>
         <div className={`absolute inset-0 ${language === 'ar' ? 'bg-gradient-to-r' : 'bg-gradient-to-l'} from-[var(--background)] to-transparent opacity-60`}></div>
         
@@ -241,7 +241,7 @@ const DetailsPage: React.FC = () => {
                 <img src={`${IMAGE_BASE_URL}${POSTER_SIZE}${item.poster_path}`} 
                      srcSet={`${IMAGE_BASE_URL}w185${item.poster_path} 185w, ${IMAGE_BASE_URL}w342${item.poster_path} 342w, ${IMAGE_BASE_URL}${POSTER_SIZE}${item.poster_path} 500w`}
                      sizes="(max-width: 639px) 112px, (max-width: 767px) 144px, (max-width: 1023px) 192px, 208px"
-                     className="w-full rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border-2 border-[var(--border)]" alt="poster"/>
+                     className="w-full rounded-xl shadow-[0_10px_40px_-10px_rgba(0,0,0,0.5)] border-2 border-[var(--border)]" alt="poster" loading="lazy" decoding="async" />
             </div>
             <div className="flex-1 min-w-0 pt-16 sm:pt-24 md:pt-32">
                 <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-extrabold drop-shadow-lg text-white animate-fade-in-up" style={{animationDelay: '200ms'}}>{item.title || item.name}</h1>
@@ -318,7 +318,7 @@ const DetailsPage: React.FC = () => {
                      <img src={episode.still_path ? `${IMAGE_BASE_URL}w300${episode.still_path}` : `${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${item.backdrop_path}`} 
                           srcSet={episode.still_path ? `${IMAGE_BASE_URL}w185${episode.still_path} 185w, ${IMAGE_BASE_URL}w300${episode.still_path} 300w` : undefined}
                           sizes="128px"
-                          alt={episode.name} className="object-cover w-full h-full" />
+                          alt={episode.name} className="object-cover w-full h-full"  loading="lazy" decoding="async" />
                      <div className="absolute inset-0 flex items-center justify-center transition-opacity duration-300 bg-black/50 opacity-0 group-hover:opacity-100">
                          <i className="text-2xl text-white fa-solid fa-play"></i>
                      </div>

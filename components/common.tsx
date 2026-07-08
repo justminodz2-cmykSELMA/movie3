@@ -637,7 +637,7 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                                     src={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${details.backdrop_path}`}
                                     alt={details.title || details.name}
                                     className="absolute inset-0 object-cover w-full h-full"
-                                />
+                                 loading="lazy" decoding="async" />
                                 {showAd && details.videos?.results?.length && isYtApiReady ? (
                                     <div className={`absolute top-1/2 left-1/2 w-full h-full transform -translate-x-1/2 -translate-y-1/2 scale-125 transition-opacity duration-500 ${isAdPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                                         {(() => {
@@ -665,7 +665,7 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                                             src={logoUrl} 
                                             alt={`${details.title || details.name} logo`} 
                                             className="w-full max-w-xs md:max-w-sm max-h-36 object-contain object-left drop-shadow-lg"
-                                        />
+                                         loading="lazy" decoding="async" />
                                     ) : (
                                         <h1 className="text-4xl font-black text-white" style={{ textShadow: '2px 2px 4px rgba(0,0,0,0.7)' }}>{details.title || details.name}</h1>
                                     )}
@@ -740,7 +740,7 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                                             >
                                                 <span className="text-xl text-zinc-400 font-bold">{episode.episode_number}</span>
                                                 <div className="relative flex-shrink-0 w-36 h-20 overflow-hidden rounded-md transition-transform duration-300 group-hover:scale-105 group-focus-within:scale-105">
-                                                    <img src={episode.still_path ? `${IMAGE_BASE_URL}w300${episode.still_path}` : `${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${details.backdrop_path}`} alt={episode.name} className="object-cover w-full h-full" />
+                                                    <img src={episode.still_path ? `${IMAGE_BASE_URL}w300${episode.still_path}` : `${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${details.backdrop_path}`} alt={episode.name} className="object-cover w-full h-full"  loading="lazy" decoding="async" />
                                                 </div>
                                                 <div className="flex-1">
                                                     <h4 className="font-semibold text-sm">{episode.name}</h4>
