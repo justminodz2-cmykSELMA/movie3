@@ -32,7 +32,7 @@ const Hero: React.FC = () => {
     );
 };
 
-const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; isNetflixOriginal?: boolean; index: number }> = ({ movie, onCardClick, isNetflixOriginal, index }) => {
+const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; isNetflixOriginal?: boolean; onCardFocus: (element: HTMLElement) => void; index: number }> = ({ movie, onCardClick, isNetflixOriginal, onCardFocus, index }) => {
     const navigate = useNavigate();
     const { t } = useTranslation();
     const { isYtApiReady } = useProfile();
@@ -44,6 +44,7 @@ const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; 
     const playerRef = useRef<YTPlayer | null>(null);
     const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const playerContainerId = useMemo(() => `poster-player-${movie.id}-${Math.random().toString(36).substring(2)}`, [movie.id]);
+    const cardRef = useRef<HTMLDivElement>(null);
 
     const handleGlow = useCallback(() => {
         // Perf: dead work removed
@@ -73,7 +74,10 @@ const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; 
     const handleFocus = useCallback(() => {
         handleGlow();
         setIsFocused(true);
-    }, [handleGlow]);
+        if (cardRef.current) {
+            onCardFocus(cardRef.current);
+        }
+    }, [handleGlow, onCardFocus]);
 
     const handleBlur = useCallback(() => {
         setIsFocused(false);
@@ -122,6 +126,7 @@ const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; 
 
     return (
         <div 
+            ref={cardRef}
             className="interactive-card-container relative flex-shrink-0 w-[24vw] min-w-[220px] max-w-[320px] cursor-pointer glow-card-container focusable rounded-lg mb-8" 
             onMouseEnter={handleMouseEnter} 
             onMouseLeave={handleMouseLeave} 
@@ -170,16 +175,107 @@ const PosterCard: React.FC<{ movie: Movie; onCardClick: (movie: Movie) => void; 
 
 const ContentRow: React.FC<{ title: string; movies: Movie[]; onCardClick: (movie: Movie) => void; zIndex?: number }> = ({ title, movies, onCardClick, zIndex }) => {
     if (!movies || movies.length === 0) return null;
+    const [isRowActive, setIsRowActive] = useState(false);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const rowContentRef = useRef<HTMLDivElement>(null);
+    const rowRef = useRef<HTMLDivElement>(null);
+    const [isInView, setIsInView] = useState(false);
+
+    useEffect(() => {
+        const observer = new IntersectionObserver(
+            ([entry]) => {
+                if (entry.isIntersecting) {
+                    setIsInView(true);
+                    observer.unobserve(entry.target);
+                }
+            },
+            {
+                root: null,
+                rootMargin: "0px",
+                threshold: 0.1,
+            }
+        );
+
+        const currentRef = rowRef.current;
+        if (currentRef) {
+            observer.observe(currentRef);
+        }
+
+        return () => {
+            if (currentRef) {
+                observer.unobserve(currentRef);
+            }
+        };
+    }, []);
+
+    const handleCardFocus = useCallback((cardElement: HTMLElement) => {
+        if (!scrollContainerRef.current || !rowContentRef.current) return;
+
+        const containerWidth = scrollContainerRef.current.clientWidth;
+        const contentWidth = rowContentRef.current.scrollWidth;
+        const padding = 24;
+
+        let targetScroll = cardElement.offsetLeft - padding;
+
+        const maxScroll = contentWidth - containerWidth;
+        if (targetScroll > maxScroll) {
+            targetScroll = maxScroll;
+        }
+
+        if (targetScroll < 0) {
+            targetScroll = 0;
+        }
+
+        if (rowContentRef.current) {
+            rowContentRef.current.style.transform = `translateX(${-targetScroll}px)`;
+        }
+    }, []);
+
     const handleMouseLeaveList = useCallback(() => {
         if (window.cineStreamBgTimeoutId) {
             clearTimeout(window.cineStreamBgTimeoutId);
             window.cineStreamBgTimeoutId = null;
         }
     }, []);
+
     return (
-        <div className="my-6 md:my-8" style={{ zIndex }} onMouseLeave={handleMouseLeaveList}>
-            <h2 className="text-lg md:text-xl font-bold text-white mb-3 px-4 md:px-10">{title}</h2>
-            <div className="overflow-x-auto no-scrollbar py-32 -my-32"><div className="flex flex-nowrap gap-x-6 px-6 md:px-10">{movies.map((movie, index) => <PosterCard key={movie.id} movie={movie} onCardClick={onCardClick} index={index} />)}</div></div>
+        <div 
+            ref={rowRef}
+            className={`my-6 md:my-8 content-row ${isInView ? "is-in-view" : ""}`} 
+            style={{ zIndex }} 
+            onMouseLeave={handleMouseLeaveList}
+            onFocus={() => setIsRowActive(true)}
+            onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setIsRowActive(false);
+                }
+            }}
+        >
+            <div className="flex items-baseline justify-between mb-3 px-6">
+                <h2 className={`text-lg md:text-xl font-bold text-white transition-all duration-300 ease-out origin-left ${isRowActive ? "scale-100" : "scale-90 text-zinc-400"}`}>
+                    {title}
+                </h2>
+            </div>
+            <div ref={scrollContainerRef} className="overflow-x-hidden no-scrollbar py-32 -my-32">
+                <div 
+                    ref={rowContentRef} 
+                    className="flex flex-nowrap gap-x-6 px-6"
+                    style={{
+                        transition: "transform 0.25s cubic-bezier(0.4, 0, 0.2, 1)",
+                        willChange: "transform",
+                    }}
+                >
+                    {movies.map((movie, index) => (
+                        <PosterCard 
+                            key={movie.id} 
+                            movie={movie} 
+                            onCardClick={onCardClick} 
+                            onCardFocus={handleCardFocus}
+                            index={index} 
+                        />
+                    ))}
+                </div>
+            </div>
         </div>
     );
 };
