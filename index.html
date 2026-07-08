@@ -227,14 +227,27 @@
       }
       .interactive-card .quick-view {
         opacity: 0;
-        transition: opacity 0.25s ease-in-out;
+        transition: opacity 0.25s ease-in-out, max-height 0.25s ease-in-out, padding 0.25s ease-in-out;
         max-height: 0;
         overflow: hidden;
         padding-top: 0;
         padding-bottom: 0;
       }
+      .interactive-card-container:hover .interactive-card .quick-view,
+      .interactive-card-container:focus .interactive-card .quick-view,
+      .interactive-card-container:focus-within .interactive-card .quick-view {
+        opacity: 1;
+        max-height: 200px;
+        padding-top: 0.5rem;
+        padding-bottom: 0.75rem;
+      }
+      .interactive-card-container:hover .interactive-card {
+        transform: scale(1.05);
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        z-index: 20;
+      }
 
-      /* Mouse hover no longer scales the card or opens the Netflix-style
+      /* Mouse hover scales the card and opens the Netflix-style
          quick-view panel. Keyboard/remote focus (arrow keys) keeps its
          white border + title behavior, handled by the .focusable styles. */
       
