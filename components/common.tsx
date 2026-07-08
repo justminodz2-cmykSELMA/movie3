@@ -140,7 +140,7 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
         
         const adTimer = setTimeout(() => {
             setShowAd(true);
-        }, 5000);
+        }, 3000);
 
         return () => {
             clearTimeout(expandTimer);
@@ -516,10 +516,13 @@ export const DetailsModal: React.FC<{ item: Movie, onClose: () => void }> = ({ i
                                     className="absolute inset-0 object-cover w-full h-full"
                                 />
                                 {showAd && details.videos?.results?.length ? (
-                                    <div
-                                        id={playerContainerId}
-                                        className={`absolute top-1/2 left-1/2 w-full h-full transform -translate-x-1/2 -translate-y-1/2 scale-125 transition-opacity duration-500 ${isAdPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-                                    />
+                                    <div className={`absolute top-1/2 left-1/2 w-full h-full transform -translate-x-1/2 -translate-y-1/2 scale-125 transition-opacity duration-500 ${isAdPlaying ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                                        <div
+                                            id={playerContainerId}
+                                            className="w-full h-full pointer-events-none"
+                                        />
+                                        <div className="absolute inset-0" />
+                                    </div>
                                 ) : null}
                                 <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/70 to-transparent"></div>
                                 <div className="absolute bottom-8 left-8 z-10 max-w-[70%]">
