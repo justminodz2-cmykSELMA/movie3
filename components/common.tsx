@@ -896,7 +896,7 @@ export const CustomSelect: React.FC<{
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 onKeyDown={handleButtonKeyDown}
-                className="bg-[var(--surface)] border border-[var(--border)] text-white text-sm rounded-md focus:ring-[var(--primary)] focus:border-[var(--primary)] w-full p-2.5 flex justify-between items-center focusable"
+                className="bg-zinc-900/90 border border-zinc-800 text-white text-sm rounded-full focus:ring-2 focus:ring-white w-full px-5 py-2.5 flex justify-between items-center transition-all duration-300 hover:bg-zinc-800 hover:border-zinc-700 focusable font-medium"
                 aria-haspopup="listbox"
                 aria-expanded={isOpen}
             > 
@@ -904,7 +904,7 @@ export const CustomSelect: React.FC<{
                 <i className={`fas fa-chevron-down transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}></i>
             </button>
             {isOpen && (
-                <div className="absolute z-10 top-full mt-1 w-full bg-[var(--surface)] border border-[var(--border)] rounded-md shadow-lg max-h-60 overflow-y-auto">
+                <div className="absolute z-50 top-full mt-2 w-full bg-zinc-950/95 backdrop-blur-md border border-zinc-800 rounded-2xl shadow-2xl max-h-60 overflow-y-auto overflow-hidden">
                     <ul role="listbox">
                         {options.map((option, index) => (
                             <li
