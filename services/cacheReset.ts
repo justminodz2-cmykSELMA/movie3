@@ -10,7 +10,7 @@
 // To force another one-time reset in a future update, bump CACHE_RESET_VERSION.
 // ---------------------------------------------------------------------------
 
-const CACHE_RESET_VERSION = '9';
+const CACHE_RESET_VERSION = '10';
 const FLAG_KEY = 'cineCacheResetVersion';
 
 // Session flag used to show the "System updated" toast once after the reset.
