@@ -16,11 +16,21 @@ const SimilarItemCard: React.FC<{ item: Movie, index: number }> = ({ item, index
     navigate(`/details/${type}/${item.id}`);
   };
 
+  const handleGlow = useCallback(() => {
+    if (item.poster_path) {
+        const imageUrl = `${IMAGE_BASE_URL}w342${item.poster_path}`;
+        document.body.style.setProperty('--dynamic-bg-image', `url(${imageUrl})`);
+        document.body.classList.add('has-dynamic-bg');
+    }
+  }, [item.poster_path]);
+
   if (!item.poster_path) return null;
 
   return (
     <div
       onClick={handleClick}
+      onMouseEnter={handleGlow}
+      onFocus={handleGlow}
       className="flex-shrink-0 w-32 cursor-pointer animate-fade-in-up interactive-card-sm glow-card-container focusable"
       style={{ '--glow-image-url': `url(${IMAGE_BASE_URL}w342${item.poster_path})`, animationDelay: `${index * 50}ms` } as React.CSSProperties}
       tabIndex={0}
@@ -57,108 +67,6 @@ const DetailsPage: React.FC = () => {
   const [isOverviewExpanded, setOverviewExpanded] = useState(false);
   const [prefetchedStreamUrl, setPrefetchedStreamUrl] = useState<string | null>(null);
   const playButtonRef = useRef<HTMLButtonElement>(null);
-
-  // ---- Details-page ad: auto-plays a few seconds after the page loads ----
-  // NOTE: Ad sources MUST be permanent, CORS-friendly, non-IP-locked MP4 URLs.
-  const DETAILS_AD_SOURCES = [
-      "https://media.w3.org/2010/05/sintel/trailer.mp4",
-      "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerJoyrides.mp4"
-  ];
-  const detailsAdRef = useRef<HTMLVideoElement>(null);
-  const detailsAdStartedRef = useRef(false);
-  const [showAd, setShowAd] = useState(false);
-  const [adIndex, setAdIndex] = useState(0);
-  const [adStarted, setAdStarted] = useState(false);
-  const [adDone, setAdDone] = useState(false);
-  const [adMuted, setAdMuted] = useState(true);
-
-  // Reset + schedule the ad on every new title (starts a few seconds after load)
-  useEffect(() => {
-      setShowAd(false);
-      setAdIndex(0);
-      setAdStarted(false);
-      setAdDone(false);
-      setAdMuted(true);
-      detailsAdStartedRef.current = false;
-      if (loading || !item) return;
-      const timer = setTimeout(() => setShowAd(true), 3000);
-      return () => clearTimeout(timer);
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [loading, item?.id]);
-
-  // Load + autoplay the ad. ALWAYS starts muted (muted autoplay is the only
-  // playback universally allowed, especially on TV WebViews), with retry
-  // kicks for TVs that ignore the first play() call.
-  useEffect(() => {
-      const vid = detailsAdRef.current;
-      if (!showAd || adDone || !vid) return;
-      detailsAdStartedRef.current = false;
-      setAdStarted(false);
-      vid.setAttribute('webkit-playsinline', '');
-      vid.setAttribute('playsinline', '');
-      vid.defaultMuted = true;
-      vid.muted = true;
-      vid.src = DETAILS_AD_SOURCES[adIndex];
-      vid.load();
-      let cancelled = false;
-      const attemptPlay = () => {
-          if (cancelled) return;
-          vid.muted = true;
-          setAdMuted(true);
-          vid.play().catch(() => {});
-      };
-      attemptPlay();
-      // Kick loop: retries play() on TVs that ignore the first call, and ALSO
-      // polls playback progress as a "started" fallback for TV WebViews that
-      // never fire the `playing`/`timeupdate` events (which caused audio to
-      // play while the video stayed hidden).
-      const kick = setInterval(() => {
-          if (cancelled || detailsAdStartedRef.current) return;
-          if (!vid.paused && vid.currentTime > 0.1) {
-              detailsAdStartedRef.current = true;
-              setAdStarted(true);
-              return;
-          }
-          attemptPlay();
-      }, 1000);
-      // Watchdog: if this source never starts within 10s, try the next one,
-      // or silently give up and keep showing the backdrop image.
-      const watchdog = setTimeout(() => {
-          if (!detailsAdStartedRef.current) {
-              if (adIndex < DETAILS_AD_SOURCES.length - 1) setAdIndex(i => i + 1);
-              else setAdDone(true);
-          }
-      }, 10000);
-      return () => {
-          cancelled = true;
-          clearInterval(kick);
-          clearTimeout(watchdog);
-          vid.pause();
-          vid.removeAttribute('src');
-          vid.load();
-      };
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showAd, adIndex, adDone]);
-
-  // Mute/unmute the ad. If the device silently pauses on unmute (some TVs),
-  // revert to muted playback instead of stopping the ad.
-  const toggleAdMute = (e: React.MouseEvent) => {
-      e.stopPropagation();
-      const vid = detailsAdRef.current;
-      if (!vid) return;
-      const nextMuted = !adMuted;
-      vid.muted = nextMuted;
-      setAdMuted(nextMuted);
-      if (!nextMuted) {
-          setTimeout(() => {
-              if (vid.paused) {
-                  vid.muted = true;
-                  setAdMuted(true);
-                  vid.play().catch(() => {});
-              }
-          }, 300);
-      }
-  };
 
   useEffect(() => {
     if (!loading && item) {
@@ -246,6 +154,10 @@ const DetailsPage: React.FC = () => {
      navigate('/player', { state: { item, type, season: selectedSeason, episode, streamUrl: prefetchedStreamUrl } });
   }
 
+  const handleMouseLeaveList = useCallback(() => {
+    document.body.classList.remove('has-dynamic-bg');
+  }, []);
+
   const seasonOptions = useMemo(() => {
     if (!item?.seasons) return [];
     return item.seasons
@@ -311,8 +223,6 @@ const DetailsPage: React.FC = () => {
         <div className="absolute top-20 start-4 z-20 animate-fade-in" style={{animationDelay: '0.5s'}}>
             <button onClick={() => navigate(-1)} className="w-10 h-10 text-white bg-black/50 rounded-full backdrop-blur-sm transition-transform btn-press focusable" tabIndex={0}><i className="fa-solid fa-arrow-left"></i></button>
         </div>
-        {/* Backdrop image stays as the permanent base layer: no gray
-            placeholder can ever be visible while the ad loads or if it fails. */}
         <img
           src={`${IMAGE_BASE_URL}${BACKDROP_SIZE}${item.backdrop_path}`}
           srcSet={`${IMAGE_BASE_URL}${BACKDROP_SIZE_MEDIUM}${item.backdrop_path} 780w, ${IMAGE_BASE_URL}${BACKDROP_SIZE}${item.backdrop_path} 1280w`}
@@ -320,52 +230,8 @@ const DetailsPage: React.FC = () => {
           alt={item.title || item.name}
           className="absolute inset-0 object-cover object-top w-full h-full"
         />
-        {/* Details-page ad: rendered ABOVE the backdrop image (explicit z-index)
-            and fades itself in once real frames render. This guarantees the
-            video is visible whenever it is playing — audio can never play with
-            the picture stuck hidden behind the backdrop. */}
-        {showAd && !adDone && (
-          <video
-            ref={detailsAdRef}
-            className={`absolute inset-0 z-[1] w-full h-full object-cover transition-opacity duration-500 ${adStarted ? 'opacity-100' : 'opacity-0'}`}
-            autoPlay
-            muted
-            playsInline
-            preload="auto"
-            onPlaying={() => { detailsAdStartedRef.current = true; setAdStarted(true); }}
-            onTimeUpdate={(e) => {
-              // Extra "started" signal for TV WebViews that never fire `playing`
-              const v = e.target as HTMLVideoElement;
-              if (!detailsAdStartedRef.current && v.currentTime > 0.1) {
-                detailsAdStartedRef.current = true;
-                setAdStarted(true);
-              }
-            }}
-            onEnded={() => setAdDone(true)}
-            onError={() => {
-              // Ignore the error fired by cleanup (empty src); otherwise try
-              // the next ad source, or give up and restore the backdrop.
-              if (!detailsAdRef.current?.getAttribute('src')) return;
-              if (adIndex < DETAILS_AD_SOURCES.length - 1) setAdIndex(i => i + 1);
-              else setAdDone(true);
-            }}
-          />
-        )}
         <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)] via-[var(--background)]/80 to-transparent"></div>
         <div className={`absolute inset-0 ${language === 'ar' ? 'bg-gradient-to-r' : 'bg-gradient-to-l'} from-[var(--background)] to-transparent opacity-60`}></div>
-        {showAd && adStarted && !adDone && (
-          <div className="absolute top-20 end-4 z-20 flex items-center gap-2 animate-fade-in">
-            <span className="px-2 py-1 text-[10px] font-bold tracking-widest uppercase text-white bg-black/50 border border-white/30 rounded backdrop-blur-sm">Ad</span>
-            <button
-              onClick={toggleAdMute}
-              className="w-10 h-10 text-white bg-black/50 rounded-full backdrop-blur-sm transition-transform btn-press focusable"
-              tabIndex={0}
-              aria-label={adMuted ? 'Unmute ad' : 'Mute ad'}
-            >
-              <i className={`fa-solid ${adMuted ? 'fa-volume-xmark' : 'fa-volume-high'}`}></i>
-            </button>
-          </div>
-        )}
         
       </div>
       
@@ -469,8 +335,8 @@ const DetailsPage: React.FC = () => {
         {activeTab === 'similar' && item.recommendations?.results && item.recommendations.results.length > 0 && (
           <div>
             <h3 className="text-xl font-bold text-white mb-4">{t('similar')}</h3>
-            <div className="flex pb-4 -mx-4 overflow-x-auto no-scrollbar sm:mx-0">
-                <div className="flex flex-nowrap gap-x-4 px-4">
+            <div onMouseLeave={handleMouseLeaveList} className="flex pb-12 -mb-12 pt-6 -mt-6 -mx-4 px-4 overflow-x-auto no-scrollbar">
+                <div className="flex flex-nowrap gap-x-4">
                     {item.recommendations.results.map((movie, index) => <SimilarItemCard key={movie.id} item={movie} index={index} />)}
                 </div>
             </div>
