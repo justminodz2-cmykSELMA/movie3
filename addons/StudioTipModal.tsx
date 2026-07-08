@@ -102,7 +102,7 @@ const StudioTipModal: React.FC<{ url: string | null; onClose: () => void }> = ({
             {qrSrc && (
               <div className="flex-shrink-0 flex flex-col items-center justify-center gap-2 sm:pl-2">
                 <div className="bg-white rounded-xl p-2 shadow-lg">
-                  <img src={qrSrc} alt="QR" className="w-24 h-24 md:w-28 md:h-28" />
+                  <img src={qrSrc} alt="QR" className="w-24 h-24 md:w-28 md:h-28"  loading="lazy" decoding="async" />
                 </div>
               </div>
             )}

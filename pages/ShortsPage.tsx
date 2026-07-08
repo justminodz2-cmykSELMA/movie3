@@ -49,7 +49,7 @@ const ShortsUIOverlay: React.FC<{ short: Short; onBackClick: () => void }> = ({ 
                             src={`${IMAGE_BASE_URL}${POSTER_SIZE}${short.poster_path}`} 
                             className="w-10 h-10 rounded-full border-2 border-white object-cover animate-[spin_8s_linear_infinite]" 
                             alt="poster" 
-                        />
+                         loading="lazy" decoding="async" />
                     </button>
                 }
             </div>

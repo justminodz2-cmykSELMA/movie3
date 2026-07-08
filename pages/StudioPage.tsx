@@ -227,7 +227,7 @@ const StudioPage: React.FC = () => {
             src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png"
             alt="Logo"
             className="w-10 h-10 object-contain"
-          />
+           loading="lazy" decoding="async" />
           <div className="min-w-0">
             <h1 className="text-base md:text-lg font-extrabold leading-tight truncate">
               <i className="fa-solid fa-puzzle-piece text-red-600 mr-2" />{t('addonStudio')}

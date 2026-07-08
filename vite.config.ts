@@ -10,6 +10,23 @@ export default defineConfig(({ mode }) => {
         host: '0.0.0.0',
       },
       plugins: [react()],
+      build: {
+        // PERF: older TV browsers parse smaller/simpler output faster.
+        target: 'es2017',
+        // esbuild minification (default) — fast and aggressive tree-shaking.
+        minify: 'esbuild',
+        cssCodeSplit: true,
+        rollupOptions: {
+          output: {
+            manualChunks: {
+              // Long-cached vendor chunk: framework code changes rarely, so
+              // TVs keep it cached across app updates.
+              'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+            },
+          },
+        },
+        chunkSizeWarningLimit: 1500,
+      },
       define: {
         'process.env.API_KEY': JSON.stringify(env.GEMINI_API_KEY),
         'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY)

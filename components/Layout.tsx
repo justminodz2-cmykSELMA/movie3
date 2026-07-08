@@ -33,7 +33,7 @@ const TopNavbar: React.FC = () => {
             tabIndex={0}
         >
           {activeProfile && (
-            <img src={activeProfile.avatar} alt={activeProfile.name} className="w-9 h-9 rounded-md object-cover" />
+            <img src={activeProfile.avatar} alt={activeProfile.name} className="w-9 h-9 rounded-md object-cover"  loading="lazy" decoding="async" />
           )}
           <i className="fas fa-caret-down text-white text-sm"></i>
         </div>
@@ -79,7 +79,7 @@ const TopNavbar: React.FC = () => {
           src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png" 
           alt="Logo" 
           className="w-14 h-15 object-contain" 
-        />
+         loading="lazy" decoding="async" />
       </div>
     </header>
   );

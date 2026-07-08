@@ -266,7 +266,7 @@ const AddonPage: React.FC = () => {
                   alt=""
                   aria-hidden="true"
                   className="absolute inset-0 w-full h-full object-cover object-top"
-                />
+                 loading="lazy" decoding="async" />
               ) : (
                 <div
                   className="absolute inset-0"

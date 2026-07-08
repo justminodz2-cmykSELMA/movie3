@@ -12,7 +12,7 @@ const Hero: React.FC = () => {
     const heroImage = "https://blog.xcvgsystems.com/wp-content/uploads/2024/04/fallout_promo.jpg"; // Fallout
     return (
         <div className="relative w-full h-[70vh] min-h-[300px] text-white overflow-hidden rounded-xl">
-            <img src={heroImage} alt="Fallout" className="absolute inset-0 w-full h-full object-cover" />
+            <img src={heroImage} alt="Fallout" className="absolute inset-0 w-full h-full object-cover"  loading="lazy" decoding="async" />
             <div className="absolute inset-0 bg-gradient-to-t from-[var(--background)]/80 via-transparent to-transparent"></div>
             <div className="absolute inset-0 bg-gradient-to-r from-black to-transparent"></div>
             <div className="absolute inset-0 bg-gradient-to-l from-[var(--background)]/50 to-transparent"></div>
@@ -22,7 +22,7 @@ const Hero: React.FC = () => {
                         <span className="text-xl font-black text-red-600" style={{ fontFamily: "'Anton', sans-serif" }}>N</span>
                         <span className="text-sm font-semibold tracking-[0.2em] text-zinc-200 uppercase">SERIES</span>
                     </div>
-                    <img src="https://i.ibb.co/N2z8HGjh/pngimg-com-fallout-PNG34.png" alt="Fallout Title" className="w-full max-w-sm md:max-w-md drop-shadow-lg mb-4" />
+                    <img src="https://i.ibb.co/N2z8HGjh/pngimg-com-fallout-PNG34.png" alt="Fallout Title" className="w-full max-w-sm md:max-w-md drop-shadow-lg mb-4"  loading="lazy" decoding="async" />
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-base text-zinc-200" style={{ textShadow: '1px 1px 2px rgba(0,0,0,0.7)' }}>
                         <span>Series</span><span>•</span><span>Sci-Fi</span><span>•</span><span>2024</span><span>•</span><span>1 Season</span><span>•</span><span className="px-2 py-0.5 border border-zinc-400 text-sm rounded">TV-MA</span>
                     </div>

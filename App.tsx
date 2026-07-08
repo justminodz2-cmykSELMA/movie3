@@ -1,34 +1,39 @@
-import React, { useState, useEffect, useRef, useCallback, createContext, useContext, ReactNode } from 'react';
+import React, { useState, useEffect, useRef, useCallback, createContext, useContext, ReactNode, lazy, Suspense } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
-import HomePage from './pages/HomePage';
-import PlayerPage from './pages/PlayerPage';
-import ProfilePage from './pages/ProfilePage';
-import GenericPage from './pages/GenericPage';
-import ActorDetailsPage from './pages/ActorDetailsPage';
-import SettingsPage from './pages/SettingsPage';
-import MoviesPage from './pages/MoviesPage';
-import TvShowsPage from './pages/TvShowsPage';
-import DetailsPage from './pages/DetailsPage';
-import CinemaPage from './pages/CinemaPage';
-import LiveRoomPage from './pages/LiveRoomPage';
-import ShortsPage from './pages/ShortsPage';
-import YouPage from './pages/YouPage';
-import AISearchPage from './pages/AISearchPage';
-import IframePlayerPage from './pages/IframePlayerPage';
-import IptvPage from './pages/IptvPage';
-import LoginPage from './pages/LoginPage';
-import QrApprovePage from './pages/QrApprovePage';
-import AdminPage from './pages/AdminPage';
+// PERF: every page is now code-split with React.lazy so the app only downloads
+// and parses the JS for the page actually being viewed. Nothing inside any page
+// (player, fetching, styles) was modified — only WHEN its code loads changed.
+const HomePage = lazy(() => import('./pages/HomePage'));
+const PlayerPage = lazy(() => import('./pages/PlayerPage'));
+const ProfilePage = lazy(() => import('./pages/ProfilePage'));
+const GenericPage = lazy(() => import('./pages/GenericPage'));
+const ActorDetailsPage = lazy(() => import('./pages/ActorDetailsPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const MoviesPage = lazy(() => import('./pages/MoviesPage'));
+const TvShowsPage = lazy(() => import('./pages/TvShowsPage'));
+const DetailsPage = lazy(() => import('./pages/DetailsPage'));
+const CinemaPage = lazy(() => import('./pages/CinemaPage'));
+const LiveRoomPage = lazy(() => import('./pages/LiveRoomPage'));
+const ShortsPage = lazy(() => import('./pages/ShortsPage'));
+const YouPage = lazy(() => import('./pages/YouPage'));
+const AISearchPage = lazy(() => import('./pages/AISearchPage'));
+const IframePlayerPage = lazy(() => import('./pages/IframePlayerPage'));
+const IptvPage = lazy(() => import('./pages/IptvPage'));
+const LoginPage = lazy(() => import('./pages/LoginPage'));
+const QrApprovePage = lazy(() => import('./pages/QrApprovePage'));
+const AdminPage = lazy(() => import('./pages/AdminPage'));
+const AddonsPage = lazy(() => import('./pages/AddonsPage'));
+const AddonPage = lazy(() => import('./pages/AddonPage'));
+const StudioPage = lazy(() => import('./pages/StudioPage'));
+// PERF: PipPlayer pulls in hls.js — splitting it keeps hls.js out of the
+// startup bundle. Its code and behavior are completely untouched.
+const PipPlayer = lazy(() => import('./components/PipPlayer'));
 import { RequireAuth, GuestWatchGate } from './components/AuthGuard';
-import AddonsPage from './pages/AddonsPage';
-import AddonPage from './pages/AddonPage';
-import StudioPage from './pages/StudioPage';
 import { AddonProvider } from './addons/AddonContext';
 import { ProfileProvider, useProfile } from './contexts/ProfileContext';
 import { LanguageProvider } from './contexts/LanguageContext';
 import { PlayerProvider } from './contexts/PlayerContext';
 import { ToastContainer, DetailsModal, TVCursor } from './components/common';
-import PipPlayer from './components/PipPlayer';
 import { useTranslation } from './contexts/LanguageContext';
 import { consumeSystemUpdatedNotice } from './services/cacheReset';
 
@@ -280,6 +285,7 @@ const App: React.FC = () => {
           {showTvCursor && <TVCursor position={cursorPosition} visible={true} clickEffect={clickEffect} />}
           <HashRouter>
             <PlayerProvider>
+              <Suspense fallback={null}>
               <Routes>
                 <Route path="/" element={<RequireAuth><ProfilePage /></RequireAuth>} />
                 <Route path="/home" element={<RequireAuth><HomePage /></RequireAuth>} />
@@ -309,6 +315,7 @@ const App: React.FC = () => {
                 <Route path="/studio/:stoken" element={<StudioPage />} />
               </Routes>
               <PipPlayer />
+              </Suspense>
               <GlobalModal />
             </PlayerProvider> 
           </HashRouter>

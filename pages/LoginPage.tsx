@@ -157,7 +157,7 @@ const LoginPage: React.FC = () => {
         src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png"
         alt="Vetrix"
         className="w-28 h-28 object-contain mb-10"
-      />
+       loading="lazy" decoding="async" />
         <div className="bg-zinc-900/70 border border-zinc-800 rounded-2xl p-10 max-w-md w-full text-center shadow-2xl backdrop-blur-md">
           <div className="w-20 h-20 mx-auto rounded-full bg-red-600/15 border border-red-600/40 flex items-center justify-center mb-5">
             <i className="fa-solid fa-user text-3xl text-red-500"></i>
@@ -200,7 +200,7 @@ const LoginPage: React.FC = () => {
         src="https://i.ibb.co/Vc2jxqRR/Chat-GPT-Image-Jul-1-2026-01-37-52-PM.png"
         alt="Vetrix"
         className="w-28 h-28 object-contain mb-10"
-      />
+       loading="lazy" decoding="async" />
 
       <div className="flex flex-col lg:flex-row items-stretch gap-8 w-full max-w-5xl">
         {/* QR panel */}
@@ -212,7 +212,7 @@ const LoginPage: React.FC = () => {
             {qrExpired ? (
               <div className="text-zinc-800 text-sm font-semibold px-4">QR code expired</div>
             ) : qrImageUrl ? (
-              <img src={qrImageUrl} alt="Login QR code" className="w-full h-full object-contain rounded-lg" />
+              <img src={qrImageUrl} alt="Login QR code" className="w-full h-full object-contain rounded-lg"  loading="lazy" decoding="async" />
             ) : (
               <i className="fa-solid fa-circle-notch fa-spin text-3xl text-zinc-400"></i>
             )}

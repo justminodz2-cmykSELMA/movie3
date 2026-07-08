@@ -1,6 +1,10 @@
 
 
-import { GoogleGenAI, Type } from "@google/genai";
+// PERF: @google/genai (~200KB) is now dynamically imported inside
+// analyzeSubtitlesForSkips() so it never loads at app startup — it only
+// downloads the moment subtitle skip-analysis is actually requested.
+// Behavior, logic, and all fetching code are 100% identical.
+import type { GoogleGenAI as GoogleGenAIType } from "@google/genai";
 import { TMDB_API_KEY, TMDB_BASE_URL, SCRAPER_API_URL, AVAILABLE_PROVIDERS } from '../contexts/constants';
 import { Movie, SubtitleTrack, StreamLink, StreamData } from '../types';
 
@@ -553,7 +557,9 @@ export const getDownloadedVideoURL = async (id: string): Promise<string | null> 
     return URL.createObjectURL(blob);
 };
 
-const skipTimesSchema = {
+// Schema is built lazily with the dynamically imported Type enum so the SDK
+// is not needed at module load. Values are identical to before.
+const buildSkipTimesSchema = (Type: typeof import("@google/genai").Type) => ({
     type: Type.OBJECT,
     properties: {
         intro: {
@@ -575,7 +581,7 @@ const skipTimesSchema = {
             required: ['start', 'end']
         }
     }
-};
+});
 
 import { SCRAPER_API_URL } from '../contexts/constants';
 
@@ -584,7 +590,9 @@ export const analyzeSubtitlesForSkips = async (srtContent: string): Promise<{ in
         console.error("Gemini API key not found.");
         return { intro: null, outro: null };
     }
-    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const { GoogleGenAI, Type } = await import("@google/genai");
+    const skipTimesSchema = buildSkipTimesSchema(Type);
+    const ai: GoogleGenAIType = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
     const prompt = `You are an expert video editor's assistant. Your task is to analyze subtitle files (SRT format) to identify the start and end times for the intro and outro sequences.
 

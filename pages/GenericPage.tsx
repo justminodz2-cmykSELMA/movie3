@@ -414,7 +414,7 @@ const GenericPage: React.FC<{
                     if(pageType === 'downloads') {
                          return (
                             <div key={item.title} className="flex flex-col items-center animate-grid-item" style={{ animationDelay: `${index * 30}ms` }}>
-                                <img src={item.poster} alt={item.title} className="w-full rounded-lg" />
+                                <img src={item.poster} alt={item.title} className="w-full rounded-lg"  loading="lazy" decoding="async" />
                                 <p className="mt-2 text-sm text-center">{item.title}</p>
                             </div>
                          );
