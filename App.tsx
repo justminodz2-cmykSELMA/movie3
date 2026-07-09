@@ -112,6 +112,68 @@ const SubtitleUpdateNotice: React.FC = () => {
   return null;
 };
 
+// Full-screen modal shown once per session BEFORE the user starts browsing.
+// Announces the new app version: Download Now (vimovies.online) or stay on
+// the old version. This old version shuts down on July 15.
+const NEW_VERSION_MODAL_KEY = 'cineNewVersionModalV1';
+const NewVersionModal: React.FC = () => {
+  const [visible, setVisible] = useState(() => {
+    try {
+      return sessionStorage.getItem(NEW_VERSION_MODAL_KEY) !== '1';
+    } catch {
+      return true;
+    }
+  });
+
+  const dismiss = () => {
+    try {
+      sessionStorage.setItem(NEW_VERSION_MODAL_KEY, '1');
+    } catch {
+      /* ignore */
+    }
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/90 backdrop-blur-sm p-4">
+      <div className="w-full max-w-md bg-zinc-900 border border-zinc-700 rounded-2xl shadow-2xl p-8 text-center animate-[fadeIn_0.3s_ease-out]">
+        <div className="w-16 h-16 mx-auto mb-5 rounded-full bg-white/10 flex items-center justify-center">
+          <i className="fas fa-rocket text-3xl text-white"></i>
+        </div>
+        <h2 className="text-2xl font-bold text-white mb-2">A New Version Is Here!</h2>
+        <p className="text-zinc-300 mb-4">
+          We've launched a brand-new app — better, smoother, and{' '}
+          <span className="text-white font-semibold">much faster</span>. Download it now at{' '}
+          <span className="text-white font-semibold">vimovies.online</span>.
+        </p>
+        <div className="mb-6 px-4 py-3 rounded-lg bg-amber-500/10 border border-amber-500/40 text-amber-300 text-sm font-semibold">
+          <i className="fas fa-triangle-exclamation mr-2"></i>
+          Notice: this version will be shut down on July 15.
+        </div>
+        <div className="flex flex-col gap-3">
+          <a
+            href="https://vimovies.online"
+            target="_blank"
+            rel="noopener noreferrer"
+            autoFocus
+            className="w-full px-6 py-3 text-lg font-bold text-black bg-white rounded-md hover:bg-opacity-80 flex items-center justify-center gap-2 btn-press focusable"
+          >
+            <i className="fas fa-download"></i><span>Download Now</span>
+          </a>
+          <button
+            onClick={dismiss}
+            className="w-full px-6 py-3 text-lg font-bold text-white bg-transparent border-2 border-zinc-400 rounded-md hover:border-white flex items-center justify-center gap-2 btn-press focusable"
+          >
+            <span>Stay on old version</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const GlobalModal: React.FC = () => {
     const { modalItem, setModalItem } = useProfile();
     if (!modalItem) return null;
@@ -320,6 +382,7 @@ const App: React.FC = () => {
             </PlayerProvider> 
           </HashRouter>
           <ToastContainer />
+          <NewVersionModal />
           <SystemUpdateNotice />
           <AppUpdateNotice />
           <SubtitleUpdateNotice />
