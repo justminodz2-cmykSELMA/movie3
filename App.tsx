@@ -125,6 +125,9 @@ const NewVersionModal: React.FC = () => {
     }
   });
 
+  const downloadRef = useRef<HTMLAnchorElement>(null);
+  const stayRef = useRef<HTMLButtonElement>(null);
+
   const dismiss = () => {
     try {
       sessionStorage.setItem(NEW_VERSION_MODAL_KEY, '1');
@@ -133,6 +136,28 @@ const NewVersionModal: React.FC = () => {
     }
     setVisible(false);
   };
+
+  // Trap remote/keyboard arrows inside the modal: Up/Down (and Left/Right)
+  // move between the two buttons, Enter activates, nothing leaks to the page.
+  useEffect(() => {
+    if (!visible) return;
+    downloadRef.current?.focus();
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Tab'].includes(e.key)) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (document.activeElement === downloadRef.current) {
+          stayRef.current?.focus();
+        } else {
+          downloadRef.current?.focus();
+        }
+      } else if (e.key === 'Enter' || e.key === ' ') {
+        e.stopPropagation();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown, true);
+    return () => window.removeEventListener('keydown', onKeyDown, true);
+  }, [visible]);
 
   if (!visible) return null;
 
@@ -157,12 +182,13 @@ const NewVersionModal: React.FC = () => {
             href="https://vimovies.online"
             target="_blank"
             rel="noopener noreferrer"
-            autoFocus
+            ref={downloadRef}
             className="w-full px-6 py-3 text-lg font-bold text-black bg-white rounded-md hover:bg-opacity-80 flex items-center justify-center gap-2 btn-press focusable"
           >
             <i className="fas fa-download"></i><span>Download Now</span>
           </a>
           <button
+            ref={stayRef}
             onClick={dismiss}
             className="w-full px-6 py-3 text-lg font-bold text-white bg-transparent border-2 border-zinc-400 rounded-md hover:border-white flex items-center justify-center gap-2 btn-press focusable"
           >
